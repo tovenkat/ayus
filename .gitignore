@@ -63,3 +63,7 @@ scripts/*-sidecar/.venv/
 
 # uploaded patient files / PHI — never commit
 /uploads/
+
+# python bytecode
+__pycache__/
+*.pyc

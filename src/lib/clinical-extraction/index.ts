@@ -2,6 +2,7 @@ import type { ClinicalReportKind, UploadType } from "@prisma/client";
 import { classifyDocument } from "./classifier";
 import { extractImaging } from "./imaging";
 import { extractPrescription } from "./prescription";
+import { extractCodedBioEntities, type CodedBioEntity } from "./gliner-client";
 import type { ClinicalExtraction } from "./types";
 
 export type DispatchResult = {
@@ -9,6 +10,12 @@ export type DispatchResult = {
   extraction: ClinicalExtraction | null;
   classificationConfidence: number;
   classificationReason?: string;
+  /**
+   * Biomedical entities (lab tests → LOINC, diseases, medications, …) from the
+   * GLiNER-BioMed sidecar. Empty unless ENABLE_GLINER is on and the sidecar is
+   * reachable — so this is inert by default and never blocks extraction.
+   */
+  entities: CodedBioEntity[];
 };
 
 /**
@@ -36,11 +43,26 @@ export async function extractClinicalReport(
     console.warn(`[clinical] extraction failed for kind=${classification.kind}:`, err instanceof Error ? err.message : err);
   }
 
+  // Biomedical NER over the narrative text — runs for every kind (even ones
+  // without a specialized extractor). Gated + graceful: returns [] when the
+  // GLiNER sidecar is off, so it never blocks or fails extraction.
+  let entities: CodedBioEntity[] = [];
+  try {
+    entities = await extractCodedBioEntities(text);
+    if (entities.length > 0) {
+      const coded = entities.filter((e) => e.loincNum).length;
+      console.log(`[clinical] GLiNER: ${entities.length} entities (${coded} LOINC-coded)`);
+    }
+  } catch (err) {
+    console.warn(`[clinical] GLiNER NER failed (non-fatal):`, err instanceof Error ? err.message : err);
+  }
+
   return {
     kind: classification.kind,
     extraction,
     classificationConfidence: classification.confidence,
     classificationReason: classification.reason,
+    entities,
   };
 }
 

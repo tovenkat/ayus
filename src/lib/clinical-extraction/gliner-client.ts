@@ -99,10 +99,37 @@ export async function extractBioEntities(
 
 const CODEABLE_LABELS = /lab test|biomarker|measurement/i;
 
+const QUALIFIER_RE = /[\s,]+(?:very\s+)?(?:high|low|normal|elevated|raised|reduced|decreased|increased|positive|negative|non[- ]?reactive|reactive|borderline|abnormal|deranged|significantly?)\.?$/i;
+// A trailing measurement: optional operator + number + optional unit token
+// (e.g. "95 U/L", "9.2%", "180 mg/dL", "6.8", "1.5 mg/dL").
+const MEASUREMENT_RE = /[\s:=]+[<>≈~]?\s*\d[\d.,]*\s*(?:%|[a-zA-Zµμ][a-zA-Zµμ0-9/^.·-]*)?\s*$/;
+
+/**
+ * Strip a trailing value/unit/qualifier that GLiNER often includes in a span,
+ * so "SGPT 95 U/L" and "fasting blood sugar high" resolve to a test name.
+ * Exported for testing.
+ */
+export function cleanLabSpan(s: string): string {
+  let t = s.trim();
+  t = t.replace(QUALIFIER_RE, "").trim();
+  t = t.replace(MEASUREMENT_RE, "").trim();
+  return t;
+}
+
+/** Resolve a span to LOINC + canonical, trying the cleaned name then the raw. */
+async function codeName(raw: string): Promise<{ loincNum: string | null; canonicalName: string | null }> {
+  const cleaned = cleanLabSpan(raw);
+  let [loinc, canonical] = await Promise.all([findLoincForTestName(cleaned), resolveBiomarker(cleaned)]);
+  if (!loinc && !canonical && cleaned !== raw) {
+    [loinc, canonical] = await Promise.all([findLoincForTestName(raw), resolveBiomarker(raw)]);
+  }
+  return { loincNum: loinc?.loincNum ?? null, canonicalName: canonical?.canonicalName ?? null };
+}
+
 /**
  * Extract entities and, for the lab-test/biomarker ones, resolve them to a
- * canonical test + LOINC via the existing resolver. Non-lab entities (disease,
- * medication, …) pass through with null codes.
+ * canonical test + LOINC via the existing resolver (after span cleanup).
+ * Non-lab entities (disease, medication, …) pass through with null codes.
  */
 export async function extractCodedBioEntities(
   text: string,
@@ -114,11 +141,8 @@ export async function extractCodedBioEntities(
       if (!CODEABLE_LABELS.test(e.label)) {
         return { ...e, loincNum: null, canonicalName: null };
       }
-      const [loinc, canonical] = await Promise.all([
-        findLoincForTestName(e.text),
-        resolveBiomarker(e.text),
-      ]);
-      return { ...e, loincNum: loinc?.loincNum ?? null, canonicalName: canonical?.canonicalName ?? null };
+      const coded = await codeName(e.text);
+      return { ...e, ...coded };
     }),
   );
 }

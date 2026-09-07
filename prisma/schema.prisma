@@ -883,6 +883,9 @@ model ClinicalReport {
   severity        ReportSeverity?
 
   rawJson         Json?
+  // GLiNER-BioMed entities (lab tests → LOINC, diseases, meds) extracted from
+  // the narrative text. Null unless the GLiNER sidecar was enabled at ingest.
+  bioEntities     Json?              @map("bio_entities")
   confidence      Float
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt

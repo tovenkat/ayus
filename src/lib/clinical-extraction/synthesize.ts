@@ -6,6 +6,7 @@ import { updateMasterIndex } from "@/lib/wiki-gen/synthesize";
 import { sendWhatsApp } from "@/lib/twilio";
 import { normalizeFrequencyToEnum } from "./prescription";
 import type { ClinicalExtraction } from "./types";
+import type { CodedBioEntity } from "./gliner-client";
 import type { ClinicalReportKind, MedFrequency } from "@prisma/client";
 
 type PersistInput = {
@@ -14,6 +15,8 @@ type PersistInput = {
   kind: ClinicalReportKind;
   extraction: ClinicalExtraction | null;
   classificationConfidence: number;
+  /** GLiNER-BioMed entities — stored on the report when non-empty. */
+  entities?: CodedBioEntity[];
 };
 
 export type PersistResult = {
@@ -31,7 +34,7 @@ export type PersistResult = {
  *  5. Fire a WhatsApp alert for SEVERE / CRITICAL severities
  */
 export async function persistClinicalReport(input: PersistInput): Promise<PersistResult> {
-  const { userId, uploadId, kind, extraction, classificationConfidence } = input;
+  const { userId, uploadId, kind, extraction, classificationConfidence, entities } = input;
 
   const performedDate = extraction?.performedOn ? safeDate(extraction.performedOn) : null;
   const report = await prisma.clinicalReport.create({
@@ -55,6 +58,7 @@ export async function persistClinicalReport(input: PersistInput): Promise<Persis
       abnormalFlags: extraction?.abnormalFlags ?? [],
       severity: extraction?.severity ?? null,
       rawJson: extraction?.rawJson ? JSON.parse(JSON.stringify(extraction.rawJson)) : undefined,
+      bioEntities: entities && entities.length > 0 ? JSON.parse(JSON.stringify(entities)) : undefined,
       confidence: extraction?.confidence ?? classificationConfidence,
     },
   });

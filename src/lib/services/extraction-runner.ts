@@ -160,6 +160,7 @@ export async function runExtractionForUpload(
           kind: dispatch.kind,
           extraction: dispatch.extraction,
           classificationConfidence: dispatch.classificationConfidence,
+          entities: dispatch.entities,
         });
         await report(85, `classified as ${dispatch.kind}${persist.medicationsAdded ? ` (+${persist.medicationsAdded} meds)` : ""}`);
       } catch (clinicalErr) {
