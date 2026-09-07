@@ -8,9 +8,9 @@
  */
 
 import Link from "next/link";
-import { AlertTriangle, Activity, ArrowRight, ClipboardList } from "lucide-react";
+import { AlertTriangle, Activity, ArrowRight, ClipboardList, ShieldPlus } from "lucide-react";
 import {
-  getCareFlags, summarizeFlags, getDiseaseRegistries,
+  getCareFlags, summarizeFlags, getDiseaseRegistries, getCareGaps, summarizeGaps,
   type Severity,
 } from "@/lib/clinical-intelligence";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,10 +24,14 @@ const SEV_STYLE: Record<Severity, { badge: string; label: string }> = {
 };
 
 export async function ClinicalIntelligence({ orgId, flagLimit = 12 }: { orgId: string; flagLimit?: number }) {
-  const [flags, registries] = await Promise.all([getCareFlags(orgId), getDiseaseRegistries(orgId)]);
+  const [flags, registries, gaps] = await Promise.all([
+    getCareFlags(orgId), getDiseaseRegistries(orgId), getCareGaps(orgId),
+  ]);
   const summary = summarizeFlags(flags);
+  const gapSummary = summarizeGaps(gaps);
 
   return (
+   <div className="space-y-6">
     <div className="grid lg:grid-cols-3 gap-6">
       {/* Care flags — the worklist */}
       <Card className="lg:col-span-2">
@@ -102,5 +106,46 @@ export async function ClinicalIntelligence({ orgId, flagLimit = 12 }: { orgId: s
         </CardContent>
       </Card>
     </div>
+
+    {/* Care gaps & screening — missing/overdue monitoring for known conditions */}
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <ShieldPlus className="size-4" /> Care gaps &amp; screening
+          {gaps.length > 0 && <Badge variant="outline" className="ml-1">{gaps.length}</Badge>}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {gaps.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No monitoring gaps — the panel is up to date on recommended tests.</p>
+        ) : (
+          <>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {gapSummary.map((s) => (
+                <Badge key={s.test} variant="outline" className="text-amber-600 border-amber-500/30 bg-amber-500/10">
+                  {s.test}: {s.total}{s.missing > 0 && s.overdue > 0 ? ` (${s.missing} missing, ${s.overdue} due)` : s.missing > 0 ? " missing" : " due"}
+                </Badge>
+              ))}
+            </div>
+            <ul className="divide-y">
+              {gaps.slice(0, 10).map((g, i) => (
+                <li key={`${g.patientId}-${g.test}-${i}`} className="py-2 flex items-center gap-3">
+                  <Badge variant="outline" className={`shrink-0 ${g.kind === "missing" ? "text-amber-600 border-amber-500/40 bg-amber-500/10" : "text-orange-600 border-orange-500/40 bg-orange-500/10"}`}>
+                    {g.kind === "missing" ? "Missing" : `${g.monthsStale}mo overdue`}
+                  </Badge>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium">{g.test} <span className="font-normal text-muted-foreground">· {g.patientName}</span></p>
+                    <p className="text-xs text-muted-foreground">{g.condition} — {g.rationale}</p>
+                  </div>
+                  <Link href={`/patients/${g.patientId}`} className="text-primary text-xs hover:underline shrink-0 inline-flex items-center gap-0.5">Open <ArrowRight className="size-3" /></Link>
+                </li>
+              ))}
+            </ul>
+            {gaps.length > 10 && <p className="text-xs text-muted-foreground mt-2">+{gaps.length - 10} more gaps</p>}
+          </>
+        )}
+      </CardContent>
+    </Card>
+   </div>
   );
 }

@@ -245,3 +245,94 @@ export async function getDiseaseRegistries(orgId: string): Promise<Registry[]> {
   }
   return out.sort((a, b) => b.attention - a.attention || b.total - a.total);
 }
+
+// ─── Care gaps & screening ───────────────────────────────────────────────────
+//
+// Registries say who HAS a condition; care gaps say what MONITORING they're
+// missing. A gap is a guideline-recommended test for a patient's condition that
+// is either never on record ("missing") or overdue for repeat ("overdue").
+// Continuity-of-care surface — evidence-based intervals, decision support only.
+
+type MonitoringRule = { condition: string; test: string; intervalMonths: number; rationale: string };
+
+const MONITORING: MonitoringRule[] = [
+  { condition: "Diabetes", test: "Creatinine",       intervalMonths: 12, rationale: "annual kidney screen" },
+  { condition: "Diabetes", test: "LDL Cholesterol",  intervalMonths: 12, rationale: "annual lipid profile" },
+  { condition: "Diabetes", test: "HbA1c",            intervalMonths: 3,  rationale: "glycemic monitoring" },
+  { condition: "CKD",      test: "Hemoglobin",       intervalMonths: 12, rationale: "anemia of CKD" },
+  { condition: "CKD",      test: "Creatinine",       intervalMonths: 6,  rationale: "renal monitoring" },
+  { condition: "Thyroid",  test: "TSH",              intervalMonths: 12, rationale: "thyroid monitoring" },
+  { condition: "Dyslipidemia", test: "LDL Cholesterol", intervalMonths: 12, rationale: "lipid monitoring" },
+];
+
+function hasCondition(m: Map<string, Marker>, condition: string): boolean {
+  const g = (n: string) => m.get(n);
+  switch (condition) {
+    case "Diabetes": { const h = g("HbA1c"); return !!h && h.latest >= 6.5; }
+    case "CKD": { const c = g("Creatinine"); return !!c && c.latest > (c.high ?? 1.3); }
+    case "Thyroid": { const t = g("TSH"); return !!t && (t.latest > (t.high ?? 4.5) || t.latest < (t.low ?? 0.4)); }
+    case "Dyslipidemia": { const l = g("LDL Cholesterol"); return !!l && l.latest >= 100; }
+    default: return false;
+  }
+}
+
+const MS_PER_MONTH = 30.44 * 24 * 3.6e6;
+
+export type CareGap = {
+  patientId: string;
+  patientName: string;
+  test: string;
+  condition: string;
+  kind: "missing" | "overdue";
+  monthsStale: number | null;
+  rationale: string;
+};
+
+export async function getCareGaps(orgId: string): Promise<CareGap[]> {
+  const patients = await loadOrgPatientMarkers(orgId);
+  const now = Date.now();
+  const gaps: CareGap[] = [];
+
+  for (const p of patients) {
+    // One gap per (patient, test) — prefer "missing", else the most overdue.
+    const best = new Map<string, CareGap>();
+    for (const rule of MONITORING) {
+      if (!hasCondition(p.markers, rule.condition)) continue;
+      const marker = p.markers.get(rule.test);
+      let gap: CareGap | null = null;
+      if (!marker) {
+        gap = { patientId: p.patientId, patientName: p.name, test: rule.test, condition: rule.condition, kind: "missing", monthsStale: null, rationale: rule.rationale };
+      } else if (marker.date) {
+        const monthsStale = (now - marker.date.getTime()) / MS_PER_MONTH;
+        if (monthsStale > rule.intervalMonths) {
+          gap = { patientId: p.patientId, patientName: p.name, test: rule.test, condition: rule.condition, kind: "overdue", monthsStale: Math.round(monthsStale), rationale: rule.rationale };
+        }
+      }
+      if (!gap) continue;
+      const prev = best.get(rule.test);
+      // missing beats overdue; between two overdue keep the staler one.
+      if (!prev || (gap.kind === "missing" && prev.kind !== "missing") || (gap.kind === prev.kind && (gap.monthsStale ?? 0) > (prev.monthsStale ?? 0))) {
+        best.set(rule.test, gap);
+      }
+    }
+    gaps.push(...best.values());
+  }
+
+  // Missing first, then overdue by staleness.
+  gaps.sort((a, b) => (a.kind === b.kind ? (b.monthsStale ?? 0) - (a.monthsStale ?? 0) : a.kind === "missing" ? -1 : 1));
+  return gaps;
+}
+
+export type CareGapSummary = { test: string; missing: number; overdue: number; total: number };
+
+/** Roll gaps up by test for the summary chips. */
+export function summarizeGaps(gaps: CareGap[]): CareGapSummary[] {
+  const byTest = new Map<string, CareGapSummary>();
+  for (const g of gaps) {
+    const s = byTest.get(g.test) ?? { test: g.test, missing: 0, overdue: 0, total: 0 };
+    if (g.kind === "missing") s.missing++; else s.overdue++;
+    s.total++;
+    byTest.set(g.test, s);
+  }
+  return [...byTest.values()].sort((a, b) => b.total - a.total);
+}
