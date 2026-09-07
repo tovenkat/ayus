@@ -15,8 +15,10 @@ import crypto from "node:crypto";
 import { prisma } from "../src/lib/prisma";
 import type { Interpretation } from "@prisma/client";
 
-const ORG_SLUG = "demo-lab-analytics";
-const LAB_EMAIL = "demo-lab@userid.local";
+// Target the existing Bluebell Diagnostics demo lab (from `npm run dummy:seed`)
+// so logging in as +910000000010 shows a populated dashboard. Override with
+// LAB_DEMO_ORG_SLUG to seed a different org.
+const ORG_SLUG = process.env.LAB_DEMO_ORG_SLUG ?? "bluebell-diagnostics";
 
 type Lab = { name: string; unit: string; refLow: number | null; refHigh: number | null; older: number; newer: number };
 type PatientSpec = {
@@ -94,21 +96,18 @@ async function main() {
     console.warn(`[lab-demo] ⚠ canonical tests not seeded: ${missing.join(", ")} — run \`npm run biomarkers:seed\` first. Those biomarkers will be skipped.`);
   }
 
-  // 2. Lab org + owner user.
-  const labUser = await prisma.user.upsert({
-    where: { email: LAB_EMAIL },
-    update: {},
-    create: { email: LAB_EMAIL, name: "Demo Diagnostics (Lab)" },
+  // 2. Resolve the target lab org + its owner (created by dummy:seed).
+  const org = await prisma.organization.findUnique({
+    where: { slug: ORG_SLUG },
+    include: { members: { orderBy: { createdAt: "asc" }, take: 1, select: { userId: true } } },
   });
-  let org = await prisma.organization.findUnique({ where: { slug: ORG_SLUG } });
   if (!org) {
-    org = await prisma.organization.create({
-      data: {
-        name: "Demo Diagnostics", slug: ORG_SLUG, type: "DIAGNOSTIC_CENTER",
-        members: { create: { userId: labUser.id, role: "OWNER" } },
-      },
-    });
+    throw new Error(`Org "${ORG_SLUG}" not found — run \`npm run dummy:seed\` first (or set LAB_DEMO_ORG_SLUG).`);
   }
+  if (org.type !== "DIAGNOSTIC_CENTER") {
+    console.warn(`[lab-demo] ⚠ org "${ORG_SLUG}" is ${org.type}, not DIAGNOSTIC_CENTER — the lab dashboard only renders for lab accounts.`);
+  }
+  const labUserId = org.members[0]?.userId ?? null; // owner, used as requestedById
 
   // 3. Wipe prior demo data (cascades reports→testResults).
   await prisma.upload.deleteMany({ where: { organizationId: org.id } });
@@ -128,7 +127,7 @@ async function main() {
     await prisma.patientLink.upsert({
       where: { organizationId_patientId: { organizationId: org.id, patientId: patient.id } },
       update: { status: "GRANTED", respondedAt: new Date() },
-      create: { organizationId: org.id, patientId: patient.id, status: "GRANTED", requestedById: labUser.id, respondedAt: new Date() },
+      create: { organizationId: org.id, patientId: patient.id, status: "GRANTED", requestedById: labUserId ?? undefined, respondedAt: new Date() },
     });
 
     // Two reports per patient: older + newer.
@@ -138,7 +137,7 @@ async function main() {
       const needsReview = phase === "newer" && !!spec.flagReview;
       const upload = await prisma.upload.create({
         data: {
-          userId: patient.id, organizationId: org.id, uploadedById: labUser.id,
+          userId: patient.id, organizationId: org.id, uploadedById: labUserId ?? undefined,
           originalName: `${spec.name.split(" ")[0]}_labreport_${phase}.pdf`,
           storagePath: `${patient.id}/${sha}.pdf`, mimeType: "application/pdf",
           sizeBytes: 120000, sha256: sha, uploadType: "LAB_REPORT",
@@ -177,7 +176,7 @@ async function main() {
   }
 
   console.log(`[lab-demo] done — org "${org.name}", ${PATIENTS.length} patients (all GRANTED), ${reportCount} reports, ${resultCount} results.`);
-  console.log(`[lab-demo] lab login user: ${LAB_EMAIL}  (org ${org.slug})`);
+  console.log(`[lab-demo] populated org ${org.slug} — log in as the lab owner (+910000000010) to see the dashboard`);
 }
 
 main()

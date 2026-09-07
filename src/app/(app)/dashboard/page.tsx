@@ -8,6 +8,8 @@ import { RiskThermometer } from "@/components/dashboard/risk-thermometer";
 import { RecoveryPlan } from "@/components/dashboard/recovery-plan";
 import { PatientAccessRequests } from "@/components/patients/access-requests-server";
 import { LabDashboard } from "@/components/dashboard/lab-dashboard";
+import { DoctorDashboard } from "@/components/dashboard/doctor-dashboard";
+import { HospitalDashboard } from "@/components/dashboard/hospital-dashboard";
 import { getAccountKind } from "@/lib/account-kind";
 import { buildRiskSummary } from "@/lib/risk-assessment";
 import { H1, Muted } from "@/components/ui/typography";
@@ -382,12 +384,12 @@ export default async function DashboardPage({
   const userId = await requireAuth();
   const kind = await getAccountKind(userId);
 
-  // Labs get a purpose-built operational dashboard instead of the personal one.
-  if (kind === "lab") {
+  // Roster orgs get purpose-built operational dashboards instead of the personal one.
+  if (kind === "lab" || kind === "doctor" || kind === "hospital") {
     return (
       <div className="space-y-10">
         <Suspense fallback={<DashboardFallback />}>
-          <LabDashboard />
+          {kind === "lab" ? <LabDashboard /> : kind === "doctor" ? <DoctorDashboard /> : <HospitalDashboard />}
         </Suspense>
       </div>
     );
