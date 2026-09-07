@@ -1,15 +1,17 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  /* Single standard font across the app (shadcn default: Inter). */
+  --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, monospace;
+  --font-heading: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -126,5 +128,57 @@
   }
   html {
     @apply font-sans;
+  }
+}
+
+/* Unresolved wikilinks — dashed underline to signal missing pages */
+.wikilink-unresolved {
+  color: var(--destructive);
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-underline-offset: 3px;
+  cursor: help;
+  opacity: 0.7;
+}
+
+/* Prose overrides for wiki content */
+.prose {
+  --tw-prose-links: var(--primary);
+}
+.prose pre {
+  background: var(--muted);
+  border: 1px solid var(--border);
+}
+.prose code:not(pre code) {
+  background: var(--muted);
+  padding: 0.15em 0.35em;
+  border-radius: 0.25rem;
+  font-size: 0.875em;
+}
+.prose blockquote {
+  border-left-color: var(--primary);
+}
+.prose table {
+  font-size: 0.875em;
+}
+.prose img {
+  border-radius: var(--radius);
+}
+/* Print styles — used by Doctor Visit Prep */
+@media print {
+  [data-sidebar="sidebar"],
+  [data-slot="sidebar-wrapper"] > *:not(main),
+  header[class*="bg-background"],
+  nav,
+  footer {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  main {
+    padding: 0 !important;
+    max-width: 100% !important;
   }
 }

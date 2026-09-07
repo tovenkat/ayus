@@ -39,3 +39,27 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+
+# ── project-specific: data, models, local services (not for git) ──
+# local vector DB
+/.lancedb/
+# patient records / PHI — never commit
+/MedRecords/
+# LOINC reference CSVs (~138M, downloaded separately)
+/ionic/
+# nested scratch dir
+/phr2/
+# tesseract model blobs
+eng.traineddata
+*.traineddata
+# MCP server config (may contain tokens)
+.mcp.json
+# python sidecar virtualenvs
+scripts/*-sidecar/.venv/
+
+# allow the example env even though .env* is ignored above
+!.env.example
+
+# uploaded patient files / PHI — never commit
+/uploads/

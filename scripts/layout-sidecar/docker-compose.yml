@@ -1,0 +1,38 @@
+# Layout-analysis sidecar as a Docker service.
+#
+# Usage:
+#   docker compose up -d         # start in background
+#   docker compose logs -f       # follow logs
+#   docker compose down          # stop
+#   docker compose build         # rebuild after Dockerfile / requirements change
+#
+# The named volume `paddleocr_cache` keeps the ~300 MB of PaddleOCR model
+# weights across restarts. Nuke it (`docker volume rm layout-sidecar_paddleocr_cache`)
+# only if you want to force a fresh download.
+
+services:
+  layout-sidecar:
+    build: .
+    container_name: phr2-layout-sidecar
+    ports:
+      - "8000:8000"
+    volumes:
+      - paddleocr_cache:/root/.paddleocr
+    environment:
+      # Skip the ~60s warmup at boot — first /analyze pays the cost, but the
+      # server is up immediately and /health responds instantly.
+      WARM_ON_STARTUP: "yes"
+      # 10-minute per-request ceiling. Long enough for a 20-page report.
+      ANALYZE_TIMEOUT_SEC: "600"
+    restart: unless-stopped
+    healthcheck:
+      # /health is now async and non-blocking (see main.py) so this stays
+      # green even during a long /analyze.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+
+volumes:
+  paddleocr_cache:

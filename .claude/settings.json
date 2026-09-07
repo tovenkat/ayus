@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm uninstall *)",
+      "Bash(npx tsc *)",
+      "Bash(ollama ps *)",
+      "Bash(ollama list *)",
+      "Bash(sysctl hw.memsize hw.ncpu)",
+      "Bash(system_profiler SPHardwareDataType)",
+      "Read(//Users/venkat/.ollama/models/blobs/**)",
+      "Bash(npx prisma *)"
+    ]
+  }
+}

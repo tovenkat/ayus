@@ -1,0 +1,13 @@
+# GLiNER-BioMed NER sidecar.
+#
+# First run downloads the model (~500 MB for base) to ~/.cache/huggingface.
+# gliner pulls in torch + transformers; CPU wheels are fine for the base model.
+
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+# Official GLiNER (knowledgator). Works with the Ihor/gliner-biomed-* models.
+gliner>=0.2.13
+# gliner depends on torch + transformers + huggingface-hub; pinned loosely so
+# pip resolves CPU-compatible wheels for the platform.
+torch>=2.2
+transformers>=4.40

@@ -1,0 +1,1066 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ──────────────────────────────────────────────────────
+
+enum FileStatus {
+  UPLOADED
+  PROCESSING
+  READY
+  NEEDS_REVIEW
+  CONFIRMED
+  ERROR
+}
+
+enum DocType {
+  MARKDOWN
+  TEXT
+  PDF
+  IMAGE
+  CSV
+  JSON
+}
+
+enum ChatRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum JobType {
+  INGEST
+  REINDEX
+  AUTO_TAG
+  AUTO_LINK
+  EXTRACT
+  WIKI_GENERATE
+  LINT
+}
+
+enum UploadType {
+  LAB_REPORT
+  PRESCRIPTION
+  DISCHARGE_SUMMARY
+  DOCTOR_NOTE
+  HEALTH_NOTE
+  OTHER
+}
+
+enum DateSource {
+  SAMPLE_COLLECTED
+  REPORT_DATE
+  UNKNOWN
+}
+
+enum ValueOperator {
+  LT
+  GT
+  EQ
+  APPROX
+}
+
+enum Interpretation {
+  LOW
+  NORMAL
+  HIGH
+  UNKNOWN
+}
+
+enum OrgType {
+  INDIVIDUAL
+  CLINIC
+  DIAGNOSTIC_CENTER
+  HOSPITAL
+  ENTERPRISE
+}
+
+enum SubscriptionTier {
+  FREE
+  PERSONAL
+  FAMILY
+  CLINIC_STARTER
+  DIAGNOSTIC_CENTER
+  HOSPITAL_SITE
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+enum OrgRole {
+  OWNER
+  ADMIN
+  STAFF
+  PATIENT
+}
+
+enum AiProvider {
+  OLLAMA_LOCAL
+  VLLM
+  LLAMACPP
+  GEMINI
+  OPENAI
+  CLAUDE
+  AZURE_OPENAI
+  BEDROCK
+  VERTEX
+}
+
+// ─── Auth ───────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  phone         String?   @unique
+  phoneVerified DateTime?
+  whatsappOptIn Boolean   @default(true)
+  name          String?
+  passwordHash  String?
+  emailVerified DateTime?
+  image         String?
+  healthMode    Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Emergency card fields
+  dateOfBirth              DateTime?
+  bloodType                String?  // A+, A-, B+, B-, O+, O-, AB+, AB-
+  allergies                String[] @default([])
+  chronicConditions        String[] @default([])
+  emergencyContactName     String?
+  emergencyContactPhone    String?
+  emergencyContactRelation String?
+
+  // AI preferences (null = inherit org defaults or system default)
+  aiProvider       AiProvider?
+  aiModel          String?
+  byokKeyEncrypted String? // user-level BYOK (Personal tier+)
+  vllmBaseUrl      String? // per-user vLLM endpoint override (falls back to VLLM_BASE_URL env)
+  llamaCppBaseUrl  String? // per-user llama.cpp endpoint override (falls back to LLAMACPP_BASE_URL env)
+  privacyMode      Boolean     @default(false) // force local Ollama
+
+  accounts       Account[]
+  sessions       Session[]
+  documents      Document[]
+  collections    Collection[]
+  chatSessions   ChatSession[]
+  jobs           Job[]
+  uploads        Upload[]
+  doctorNotes    DoctorNote[]
+  medications    Medication[]
+  dietSchedules  DietSchedule[]
+  reports        Report[]
+  testResults    TestResult[]
+  clinicalReports ClinicalReport[]
+  orgMemberships OrganizationMember[]
+  usageEvents    UsageEvent[]
+  patientLinks   PatientLink[]        @relation("PatientLinks")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model PhoneOtp {
+  id         String   @id @default(cuid())
+  phone      String
+  codeHash   String
+  expiresAt  DateTime
+  attempts   Int      @default(0)
+  verifiedAt DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([phone, createdAt])
+}
+
+// ─── Upload & Document ──────────────────────────────────────────
+
+model Upload {
+  id           String     @id @default(cuid())
+  userId       String
+  originalName String
+  storagePath  String
+  mimeType     String
+  sizeBytes    Int
+  sha256       String
+  uploadType   UploadType @default(OTHER)
+  status       FileStatus @default(UPLOADED)
+  errorMessage String?
+  createdAt    DateTime   @default(now())
+
+  // Org attribution for upload-on-behalf-of: when a lab/clinic uploads for a
+  // patient, userId is the *patient* (so the report lands in their records)
+  // while organizationId + uploadedById record who did the upload.
+  organizationId String?
+  uploadedById   String?
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization?   @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  document       Document?
+  report         Report?
+  clinicalReport ClinicalReport?
+  jobs           Job[]
+
+  @@unique([userId, sha256])
+  @@index([organizationId, createdAt])
+}
+
+model Document {
+  id           String  @id @default(cuid())
+  userId       String
+  uploadId     String? @unique
+  slug         String
+  title        String
+  docType      DocType
+  rawContent   String
+  renderedHtml String?
+  summary      String?
+  wordCount    Int     @default(0)
+
+  // Obsidian metadata
+  frontmatter Json?
+  aliases     String[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  upload        Upload?              @relation(fields: [uploadId], references: [id], onDelete: SetNull)
+  tags          DocumentTag[]
+  chunks        Chunk[]
+  outgoingLinks WikiLink[]           @relation("LinkSource")
+  incomingLinks WikiLink[]           @relation("LinkTarget")
+  collections   CollectionDocument[]
+  doctorNote    DoctorNote?
+
+  @@unique([userId, slug])
+  @@index([userId, updatedAt])
+}
+
+model Tag {
+  id          String        @id @default(cuid())
+  name        String        @unique
+  aiSuggested Boolean       @default(false)
+  documents   DocumentTag[]
+}
+
+model DocumentTag {
+  documentId String
+  tagId      String
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  tag      Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([documentId, tagId])
+}
+
+model WikiLink {
+  id         String   @id @default(cuid())
+  sourceId   String
+  targetId   String?
+  targetSlug String
+  createdAt  DateTime @default(now())
+
+  source Document  @relation("LinkSource", fields: [sourceId], references: [id], onDelete: Cascade)
+  target Document? @relation("LinkTarget", fields: [targetId], references: [id], onDelete: SetNull)
+
+  @@index([sourceId])
+  @@index([targetId])
+  @@index([targetSlug])
+}
+
+model Collection {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  icon      String?
+  createdAt DateTime @default(now())
+
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documents CollectionDocument[]
+
+  @@unique([userId, name])
+}
+
+model CollectionDocument {
+  collectionId String
+  documentId   String
+  addedAt      DateTime @default(now())
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  document   Document   @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@id([collectionId, documentId])
+}
+
+// ─── Chunks & Embeddings ────────────────────────────────────────
+
+model Chunk {
+  id         String  @id @default(cuid())
+  documentId String
+  index      Int
+  content    String
+  charStart  Int
+  charEnd    Int
+  embedded   Boolean @default(false)
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId, index])
+}
+
+// ─── Chat ───────────────────────────────────────────────────────
+
+model ChatSession {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String?
+  createdAt DateTime @default(now())
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages ChatMessage[]
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  sessionId String
+  role      ChatRole
+  content   String
+  citations Json?
+  createdAt DateTime @default(now())
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+// ─── Jobs ───────────────────────────────────────────────────────
+
+model Job {
+  id        String    @id @default(cuid())
+  userId    String
+  uploadId  String?
+  type      JobType
+  status    JobStatus @default(PENDING)
+  payload   Json?
+  error     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  upload Upload? @relation(fields: [uploadId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+}
+
+// ─── Health: Doctor Notes ───────────────────────────────────────
+
+enum Specialty {
+  GENERAL
+  CARDIOLOGY
+  ENDOCRINOLOGY
+  GASTROENTEROLOGY
+  NEPHROLOGY
+  NEUROLOGY
+  ONCOLOGY
+  OPHTHALMOLOGY
+  ORTHOPEDICS
+  PULMONOLOGY
+  DERMATOLOGY
+  UROLOGY
+  GYNECOLOGY
+  PSYCHIATRY
+  ENT
+  DENTAL
+  OTHER
+}
+
+model DoctorNote {
+  id           String    @id @default(cuid())
+  userId       String
+  visitDate    DateTime
+  doctorName   String
+  specialty    Specialty @default(GENERAL)
+  clinic       String?
+  diagnosis    String?
+  notes        String?
+  followUpDate DateTime?
+  documentId   String?   @unique // optional link to wiki Document for RAG
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  document      Document?      @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  prescriptions Prescription[]
+
+  @@index([userId, visitDate])
+}
+
+model Prescription {
+  id           String  @id @default(cuid())
+  doctorNoteId String
+  medication   String
+  dosage       String?
+  frequency    String? // "once daily", "twice daily", etc.
+  duration     String? // "30 days", "ongoing"
+  instructions String?
+
+  doctorNote DoctorNote @relation(fields: [doctorNoteId], references: [id], onDelete: Cascade)
+}
+
+// ─── Health: Medication Schedule ────────────────────────────────
+
+enum MedFrequency {
+  ONCE_DAILY
+  TWICE_DAILY
+  THRICE_DAILY
+  FOUR_TIMES_DAILY
+  AS_NEEDED
+  WEEKLY
+  ALTERNATE_DAYS
+}
+
+model Medication {
+  id        String       @id @default(cuid())
+  userId    String
+  name      String
+  dosage    String?
+  frequency MedFrequency @default(ONCE_DAILY)
+  timeSlots String[] // ["morning", "afternoon", "evening", "night"]
+  startDate DateTime     @default(now())
+  endDate   DateTime?
+  active    Boolean      @default(true)
+  notes     String?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, active])
+}
+
+// ─── Health: Diet Schedule ──────────────────────────────────────
+
+enum MealType {
+  BREAKFAST
+  MORNING_SNACK
+  LUNCH
+  AFTERNOON_SNACK
+  DINNER
+  EVENING_SNACK
+}
+
+model DietSchedule {
+  id           String   @id @default(cuid())
+  userId       String
+  mealType     MealType
+  time         String // "08:00"
+  items        String
+  calories     Int?
+  notes        String?
+  restrictions String[] // ["diabetic", "low-sodium", "low-fat", "high-protein"]
+  daysOfWeek   Int[] // 0=Sun..6=Sat, empty=daily
+  active       Boolean  @default(true)
+
+  // Presentation metadata — added when the UI wants a richer meal card.
+  // All optional; the card falls back to icon + text when absent.
+  imageUrl     String?   @map("image_url")
+  cuisineTags  String[]  @default([]) @map("cuisine_tags") // ["South Indian", "High Protein", "Quick"]
+  prepMinutes  Int?      @map("prep_minutes")
+  recipeUrl    String?   @map("recipe_url")
+
+  // User state on this schedule row.
+  //   locked     — "Surprise Me" / regenerate leaves this row alone
+  //   isFavorite — pin, sort-first, hint the AI to suggest similar
+  //   hidden     — soft-delete without losing the row (undo-able)
+  locked       Boolean  @default(false)
+  isFavorite   Boolean  @default(false) @map("is_favorite")
+  hidden       Boolean  @default(false)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, active])
+}
+
+// ─── Lab Reports & Test Results ─────────────────────────────────
+
+model Report {
+  id                String     @id @default(cuid())
+  userId            String
+  uploadId          String     @unique
+  sampleCollectedOn DateTime?
+  dateSource        DateSource @default(UNKNOWN)
+  referredBy        String?
+  sampleType        String?
+  rawJson           Json?
+  confidence        Float
+  // True when any test row failed plausibility or came in below the
+  // confidence threshold (0.5). Upload.status also flips to NEEDS_REVIEW
+  // so the reports UI can surface it. User's review action clears the flag.
+  needsReview       Boolean    @default(false)
+  // Set when the report was uploaded on behalf of the patient by a roster org
+  // (lab/clinic/hospital). Null for self-uploads. Scopes the lab dashboard's
+  // queue / analytics / referring-doctor views.
+  organizationId    String?
+  createdAt         DateTime   @default(now())
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  upload       Upload        @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  testResults  TestResult[]
+
+  @@index([userId, sampleCollectedOn])
+  @@index([organizationId, createdAt])
+}
+
+model TestResult {
+  id                    String         @id @default(cuid())
+  userId                String
+  reportId              String
+  rawTestName           String
+  normalizedName        String
+  canonicalTestId       String?        // set when resolveBiomarker matched; null means "unresolved"
+  // LOINC code for this result, copied from the resolved canonical at ingestion
+  // (TestCanonical.loincNum). Denormalized so exports (FHIR Observation.code)
+  // and downstream systems get a stable code without re-resolving. Null when
+  // the test didn't resolve to a LOINC-coded canonical.
+  loincNum              String?        @map("loinc_num")
+  observedValueRaw      String
+  observedValueNumeric  Float?
+  observedValueOperator ValueOperator?
+  observedValueUnit     String?
+  referenceIntervalRaw  String?
+  referenceLow          Float?
+  referenceHigh         Float?
+  referenceUnit         String?
+  interpretation        Interpretation @default(UNKNOWN)
+  confidence            Float
+  isOutOfRange          Boolean
+  // Filled by lab-validators after extraction. "out_of_bounds" means the
+  // observed value falls outside TestCanonical.minValue/maxValue — value is
+  // still stored (audit) but confidence gets forced to 0 and the report
+  // moves to NEEDS_REVIEW.
+  plausibilityFlag      String?        @db.VarChar(30)
+  warnings              String[]       @default([])
+  // Page in the source PDF this test was extracted from. Populated by the
+  // layout path (Docling knows the source page); nullable for LLM-only
+  // extractions where page inference isn't wired yet.
+  sourcePage            Int?           @map("source_page")
+  createdAt             DateTime       @default(now())
+
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  report    Report         @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  canonical TestCanonical? @relation(fields: [canonicalTestId], references: [id], onDelete: SetNull)
+
+  @@index([userId, normalizedName, createdAt])
+  @@index([canonicalTestId, createdAt])
+}
+
+model TestCanonical {
+  id       String  @id @default(cuid())
+  name     String  @unique
+  category String?
+
+  // Specimen type. Uses LOINC's SYSTEM shorthand for consistency
+  // (e.g. "Ser/Plas", "Bld", "Ur", "CSF"). Nullable — some canonicals
+  // (e.g. calculated ratios) don't have a physical specimen.
+  specimen String? @db.VarChar(50)
+
+  // Numeric plausibility bounds — used by lab-validators to reject
+  // extractions that fall outside physically-possible ranges (e.g. an LLM
+  // that read "180" as HbA1c when the report said "18.0"). Deliberately
+  // permissive — err on the safe side to avoid false rejections of rare
+  // real values. Null means "no bound configured, skip validation".
+  minValue     Float?
+  maxValue     Float?
+  // Canonical unit for the test in Indian labs. If an extraction reports
+  // this test with a different unit, validators emit a "unit_mismatch"
+  // warning but don't reject the row.
+  expectedUnit String? @db.VarChar(50)
+
+  // Stable external identifier from LOINC (Regenstrief). Nullable because a
+  // few canonical entries (e.g. new/local tests) may not have a LOINC yet.
+  loincNum String? @map("loinc_num")
+
+  testPurpose        String? @map("test_purpose")
+  highInterpretation String? @map("high_interpretation")
+  lowInterpretation  String? @map("low_interpretation")
+  clinicalUse        String? @map("clinical_use")
+  relatedDiseases    String? @map("related_diseases")
+
+  synonyms    TestSynonym[]
+  systems     OrganSystemTestMap[]
+  testResults TestResult[]
+  rules       Rule[]
+  loincTerm   LoincTerm? @relation(fields: [loincNum], references: [loincNum], onDelete: SetNull)
+
+  @@index([loincNum])
+}
+
+model TestSynonym {
+  id              String @id @default(cuid())
+  rawName         String @unique
+  canonicalTestId String
+
+  canonicalTest TestCanonical @relation(fields: [canonicalTestId], references: [id], onDelete: Cascade)
+}
+
+// ─── Organ Systems ──────────────────────────────────────────────
+
+model OrganSystem {
+  id          String @id @default(cuid())
+  key         String @unique
+  name        String
+  icon        String
+  svgRegionId String
+
+  tests    OrganSystemTestMap[]
+  diseases Disease[]
+}
+
+model OrganSystemTestMap {
+  organSystemId   String
+  canonicalTestId String
+
+  organSystem   OrganSystem   @relation(fields: [organSystemId], references: [id], onDelete: Cascade)
+  canonicalTest TestCanonical @relation(fields: [canonicalTestId], references: [id], onDelete: Cascade)
+
+  @@id([organSystemId, canonicalTestId])
+}
+
+// LOINC (Logical Observation Identifiers Names and Codes) reference table.
+// Populated from the LOINC download at https://loinc.org/downloads/ — this
+// table is the canonical LOINC lookup; connecting biomarkers to LOINC codes
+// belongs in a separate join table (biomarker_loinc_map) when we add it.
+model LoincTerm {
+  loincNum     String  @id @map("loinc_num")
+  name         String?
+  component    String?
+  // Widened from VARCHAR(N) to TEXT: real LOINC data has outliers > 100/255
+  // chars (multi-body-region observations, verbose consumer names).
+  system       String?
+  units        String?
+  displayName  String? @map("display_name")
+  consumerName String? @map("consumer_name")
+
+  canonicals TestCanonical[]
+
+  @@map("loinc_terms")
+}
+
+// Unresolved raw test names — populated by the resolver whenever a rawName
+// doesn't match any canonical or synonym. Curation loop: review with
+// `npm run biomarkers:unresolved`, add curated ones as TestSynonym rows.
+model UnresolvedTestName {
+  id             String   @id @default(cuid())
+  rawName        String   @unique
+  normalizedForm String
+  seenCount      Int      @default(1)
+  lastSampleUserId  String?
+  lastSampleReportId String?
+  status         String   @default("PENDING") // PENDING | CURATED | IGNORED
+  firstSeenAt    DateTime @default(now())
+  lastSeenAt     DateTime @default(now()) @updatedAt
+
+  @@index([status, seenCount])
+  @@index([normalizedForm])
+}
+
+// ─── Diseases + Rules ───────────────────────────────────────────
+//
+// Diseases: ICD-10-anchored disease catalog. Populated from a standard
+// vocabulary (WHO ICD-10) — same seed-from-CSV pattern as LoincTerm.
+// Never store diagnoses on users here; this is a reference table only.
+//
+// Rules: threshold-based flags computed from a single biomarker.
+// Every rule row REQUIRES a physician disclaimer (default enforced at
+// column level so it can never be omitted). App code that surfaces
+// rule matches to end users MUST render `rule.disclaimer` alongside
+// the flag — this is the difference between "informational context"
+// and "unlicensed medical advice." See src/lib/alerts.ts for the
+// display contract.
+
+model Disease {
+  id         String  @id @default(cuid())
+  // Standard vocabulary anchor. Nullable so we can seed novel/local
+  // classifications (e.g. Ayurvedic categorizations) alongside ICD-10.
+  icd10Code  String? @unique @map("icd10_code")
+  icd10Name  String? @map("icd10_name")
+
+  commonName  String  @map("common_name")   // user-facing name ("Type 2 Diabetes")
+  category    String?                        // "endocrine", "cardiovascular", "hepatic", ...
+  description String? @db.Text
+
+  // Optional link to the primary organ system this disease affects.
+  organSystemId String?      @map("organ_system_id")
+  organSystem   OrganSystem? @relation(fields: [organSystemId], references: [id], onDelete: SetNull)
+
+  rules Rule[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([category])
+  @@index([organSystemId])
+  @@map("diseases")
+}
+
+enum RuleOperator {
+  GT              // value > thresholdLow
+  GTE             // value >= thresholdLow
+  LT              // value < thresholdLow
+  LTE             // value <= thresholdLow
+  BETWEEN         // thresholdLow <= value <= thresholdHigh
+  OUTSIDE_RANGE   // value < thresholdLow OR value > thresholdHigh
+}
+
+enum RuleSeverity {
+  INFO      // informational, worth noting
+  WARNING   // notable, follow up recommended
+  CRITICAL  // urgent, seek care promptly
+}
+
+model Rule {
+  id          String  @id @default(cuid())
+  name        String  // human-readable rule label — e.g. "Fasting glucose ≥ 126 mg/dL"
+  description String? @db.Text
+
+  // Which biomarker this rule reads. Rules always attach to a single
+  // TestCanonical — composite rules (e.g. "high LDL AND low HDL") are
+  // out of scope; those belong in a higher-level RuleGroup added later.
+  canonicalTestId String        @map("canonical_test_id")
+  canonicalTest   TestCanonical @relation(fields: [canonicalTestId], references: [id], onDelete: Cascade)
+
+  operator      RuleOperator
+  thresholdLow  Float?  @map("threshold_low")   // used by GT/GTE/LT/LTE/BETWEEN/OUTSIDE_RANGE
+  thresholdHigh Float?  @map("threshold_high")  // used by BETWEEN/OUTSIDE_RANGE only
+  unit          String? @db.VarChar(50)         // MUST match canonicalTest.expectedUnit or a convertible one
+
+  severity RuleSeverity
+
+  // Human-readable action the user should take. Required — a rule that
+  // fires without a suggestion is a UX bug ("we flagged this and… ?").
+  suggestion String @db.Text
+
+  // Physician-consultation disclaimer. Default is enforced at the column
+  // level so no rule row can be inserted without one. If a specific rule
+  // needs a stronger warning (e.g. cardiac markers → "seek emergency care"),
+  // override the default in the seed; otherwise the default stands.
+  //
+  // UI contract: any component that surfaces rule matches MUST render this
+  // text alongside the flag. Do not truncate. Do not hide behind a tooltip.
+  disclaimer String @default("This is informational only. Not a medical diagnosis. Consult a qualified physician before acting on this result.") @db.Text
+
+  // Optional link to a disease this rule flags a risk for. A rule can
+  // exist without a disease link (general "out of range" alerts).
+  diseaseId String?  @map("disease_id")
+  disease   Disease? @relation(fields: [diseaseId], references: [id], onDelete: SetNull)
+
+  // Provenance — every rule must cite where it came from (guidelines body,
+  // paper, textbook). Enforced by seeder, not schema, to keep migrations
+  // cheap when adding local rules for testing.
+  source    String? // e.g. "ADA 2024 Standards of Care", "ICMR-INDIAB", "WHO"
+  sourceUrl String? @map("source_url")
+
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([canonicalTestId, isActive])
+  @@index([diseaseId])
+  @@map("rules")
+}
+
+enum AlertSeverity {
+  INFO
+  WARN
+  URGENT
+}
+
+enum AlertStatus {
+  NEW
+  SEEN
+  DISMISSED
+}
+
+enum ShareResource {
+  EMERGENCY_CARD
+  VISIT_PREP
+  REPORT
+  FULL_WIKI
+  DOCTOR_NOTE
+}
+
+enum ClinicalReportKind {
+  IMAGING
+  ECG
+  ECHO
+  BIOPSY
+  DISCHARGE_SUMMARY
+  PRESCRIPTION
+  CONSULTATION
+  VACCINATION
+  OTHER
+}
+
+enum ReportSeverity {
+  NORMAL
+  MINOR
+  MODERATE
+  SEVERE
+  CRITICAL
+}
+
+model ClinicalReport {
+  id              String             @id @default(cuid())
+  userId          String
+  uploadId        String             @unique
+  kind            ClinicalReportKind
+  modality        String?
+  bodyPart        String?
+  procedureName   String?
+  performedOn     DateTime?
+  referringDoctor String?
+  performedBy     String?
+  institution     String?
+
+  indication      String?
+  technique       String?
+  findings        String?
+  impression      String?
+  recommendations String?
+
+  measurements    Json?
+  abnormalFlags   String[]           @default([])
+  severity        ReportSeverity?
+
+  rawJson         Json?
+  confidence      Float
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  upload Upload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind, performedOn])
+}
+
+model ShareLink {
+  id             String        @id @default(cuid())
+  token          String        @unique
+  userId         String
+  resource       ShareResource
+  resourceId     String?       // for REPORT, this is Report.id
+  snapshotJson   Json?         // frozen payload for time-sensitive resources (e.g. visit prep)
+  pinHash        String?       // optional 4–6 digit PIN
+  recipientName  String?
+  recipientPhone String?
+  expiresAt      DateTime
+  maxViews       Int?
+  viewCount      Int           @default(0)
+  lastViewedAt   DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime      @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model BiomarkerAlert {
+  id             String        @id @default(cuid())
+  userId         String
+  reportId       String
+  testResultId   String?
+  normalizedName String
+  severity       AlertSeverity @default(WARN)
+  status         AlertStatus   @default(NEW)
+  title          String
+  reason         String
+  observedValue  String?
+  previousValue  String?
+  createdAt      DateTime      @default(now())
+  dismissedAt    DateTime?
+
+  @@index([userId, status, createdAt])
+  @@index([userId, normalizedName])
+}
+
+// ─── Multi-tenant: Organization / Subscription / Usage ──────────
+
+model Organization {
+  id         String  @id @default(cuid())
+  name       String
+  slug       String  @unique
+  type       OrgType @default(INDIVIDUAL)
+  gstin      String? // India GST registration for B2B invoicing
+  country    String  @default("IN")
+  dataRegion String  @default("ap-south-1")
+  logoUrl    String?
+  brandColor String?
+
+  // Org-level AI defaults (members inherit if their user fields are null)
+  defaultAiProvider AiProvider @default(GEMINI)
+  defaultAiModel    String     @default("gemini-2.5-flash")
+  byokKeyEncrypted  String? // org-wide BYOK (Clinic tier+)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members      OrganizationMember[]
+  subscription Subscription?
+  apiKeys      ApiKey[]
+  usageEvents  UsageEvent[]
+  patientLinks PatientLink[]
+  uploads      Upload[]
+  reports      Report[]
+}
+
+// Consent link between a roster org (lab / clinic / hospital) and a patient
+// User. Gates access to a patient's records: search may surface any user to
+// let a lab *initiate* a request, but opening the patient dashboard requires
+// a GRANTED link. Aligns with DPDP / ABDM consent — the patient approves.
+enum ConsentStatus {
+  PENDING
+  GRANTED
+  REVOKED
+}
+
+model PatientLink {
+  id             String        @id @default(cuid())
+  organizationId String        // the requesting org (lab/clinic/hospital)
+  patientId      String        // the User whose records are being accessed
+  status         ConsentStatus @default(PENDING)
+  requestedById  String?       // the org member who initiated the request
+  createdAt      DateTime      @default(now())
+  respondedAt    DateTime?     // when the patient granted/revoked
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  patient      User         @relation("PatientLinks", fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, patientId])
+  @@index([patientId, status])
+  @@index([organizationId, status])
+}
+
+model OrganizationMember {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  role           OrgRole  @default(PATIENT)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+}
+
+model Subscription {
+  id              String             @id @default(cuid())
+  organizationId  String             @unique
+  tier            SubscriptionTier
+  status          SubscriptionStatus @default(TRIAL)
+  reportsPerMonth Int // quota for the period
+  reportsUsed     Int                @default(0)
+  periodStart     DateTime
+  periodEnd       DateTime
+  trialEndsAt     DateTime?
+  byokEnabled     Boolean            @default(false)
+
+  // Razorpay
+  razorpayPlanId String?
+  razorpaySubId  String?
+  razorpayCustId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model ApiKey {
+  id             String    @id @default(cuid())
+  organizationId String
+  name           String
+  keyHash        String    @unique // sha256 of the secret
+  keyPrefix      String // first 8 chars for UI display
+  scopes         String[]  @default([])
+  lastUsedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  revokedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+model UsageEvent {
+  id             String     @id @default(cuid())
+  organizationId String?
+  userId         String
+  event          String // "extract" | "ocr" | "chat" | "embed"
+  provider       AiProvider
+  model          String
+  inputTokens    Int        @default(0)
+  outputTokens   Int        @default(0)
+  costUsd        Decimal    @db.Decimal(12, 8)
+  costInr        Decimal    @db.Decimal(12, 4)
+  reportId       String?
+  durationMs     Int?
+  createdAt      DateTime   @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([userId, createdAt])
+  @@index([event, createdAt])
+}

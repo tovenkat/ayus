@@ -1,0 +1,15 @@
+# Never send these into the build context — they bloat the image and
+# don't belong in it.
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.log
+.DS_Store
+# Documentation / setup scripts stay on the host, not in the image.
+README.md
+start.sh
+stop.sh

@@ -1,0 +1,17 @@
+# Docling replaces PaddleOCR — reads PDF text layers natively (no OCR waste
+# on digital PDFs) and falls back to Surya-OCR only for scanned pages.
+#
+# First-run cost: ~2-4 GB of models to ~/.cache/docling/ from HuggingFace.
+# All subsequent runs use the cache.
+
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+python-multipart==0.0.12
+# Docling uses pkg_resources at import time — required on Python 3.12+.
+setuptools>=68
+# Docling and its ML dependencies (torch, transformers, etc.).
+docling>=2.15.0
+# For page rasterization + /crop endpoint.
+pymupdf==1.24.10
+# Pillow already comes in via docling but pin for /crop.
+pillow>=10.0.0
