@@ -14,6 +14,7 @@ import { getLabSummary } from "@/lib/lab-analytics";
 import { getCareFlags, summarizeFlags } from "@/lib/clinical-intelligence";
 import { getRiskStratification, getOrganDistribution, type RiskBucket } from "@/lib/lab-population-health";
 import { ClinicalIntelligence } from "./clinical-intelligence";
+import { RecentConsults } from "./recent-consults";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -59,6 +60,8 @@ export async function HospitalDashboard() {
       </div>
 
       <ClinicalIntelligence orgId={org.orgId} />
+
+      <RecentConsults orgId={org.orgId} />
 
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Risk stratification */}

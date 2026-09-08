@@ -8,11 +8,13 @@
  */
 
 import Link from "next/link";
-import { AlertTriangle, Activity, ArrowRight, ClipboardList, ShieldPlus } from "lucide-react";
+import { AlertTriangle, Activity, ArrowRight, ClipboardList, ShieldPlus, CheckCircle2 } from "lucide-react";
 import {
   getCareFlags, summarizeFlags, getDiseaseRegistries, getCareGaps, summarizeGaps,
   type Severity,
 } from "@/lib/clinical-intelligence";
+import { getRecentlyConsultedPatientIds } from "@/lib/consults";
+import { LogConsult } from "@/components/patients/log-consult";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -24,8 +26,8 @@ const SEV_STYLE: Record<Severity, { badge: string; label: string }> = {
 };
 
 export async function ClinicalIntelligence({ orgId, flagLimit = 12 }: { orgId: string; flagLimit?: number }) {
-  const [flags, registries, gaps] = await Promise.all([
-    getCareFlags(orgId), getDiseaseRegistries(orgId), getCareGaps(orgId),
+  const [flags, registries, gaps, consulted] = await Promise.all([
+    getCareFlags(orgId), getDiseaseRegistries(orgId), getCareGaps(orgId), getRecentlyConsultedPatientIds(orgId),
   ]);
   const summary = summarizeFlags(flags);
   const gapSummary = summarizeGaps(gaps);
@@ -49,19 +51,29 @@ export async function ClinicalIntelligence({ orgId, flagLimit = 12 }: { orgId: s
             <p className="text-sm text-muted-foreground">No decision-support flags across the panel.</p>
           ) : (
             <ul className="divide-y">
-              {flags.slice(0, flagLimit).map((f, i) => (
-                <li key={`${f.patientId}-${i}`} className="py-2.5 flex items-start gap-3">
-                  <Badge variant="outline" className={`shrink-0 mt-0.5 ${SEV_STYLE[f.severity].badge}`}>{SEV_STYLE[f.severity].label}</Badge>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium">{f.title} <span className="text-muted-foreground font-normal">· {f.patientName}</span></p>
-                    <p className="text-xs text-muted-foreground">{f.reason}</p>
-                    <p className="text-xs text-primary/90 mt-0.5">→ {f.action}</p>
-                  </div>
-                  <Link href={`/patients/${f.patientId}`} className="text-primary text-xs hover:underline shrink-0 mt-0.5 inline-flex items-center gap-0.5">
-                    Open <ArrowRight className="size-3" />
-                  </Link>
-                </li>
-              ))}
+              {flags.slice(0, flagLimit).map((f, i) => {
+                const reviewed = consulted.has(f.patientId);
+                return (
+                  <li key={`${f.patientId}-${i}`} className={`py-2.5 flex items-start gap-3 ${reviewed ? "opacity-60" : ""}`}>
+                    <Badge variant="outline" className={`shrink-0 mt-0.5 ${SEV_STYLE[f.severity].badge}`}>{SEV_STYLE[f.severity].label}</Badge>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium">{f.title} <span className="text-muted-foreground font-normal">· {f.patientName}</span></p>
+                      <p className="text-xs text-muted-foreground">{f.reason}</p>
+                      <p className="text-xs text-primary/90 mt-0.5">→ {f.action}</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 mt-0.5">
+                      {reviewed ? (
+                        <Badge variant="outline" className="text-emerald-600 border-emerald-500/30 bg-emerald-500/10"><CheckCircle2 className="size-3" /> Reviewed</Badge>
+                      ) : (
+                        <LogConsult patientId={f.patientId} patientName={f.patientName} defaultDiagnosis={f.title} defaultNotes={`${f.reason}. Plan: ${f.action}`} />
+                      )}
+                      <Link href={`/patients/${f.patientId}`} className="text-primary text-xs hover:underline inline-flex items-center gap-0.5">
+                        Open <ArrowRight className="size-3" />
+                      </Link>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
           {flags.length > flagLimit && (
