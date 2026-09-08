@@ -86,29 +86,29 @@ export function OrganAnatomy({ regions, title = "Organ health" }: { regions: Reg
 
             {/* thyroid (butterfly, base of neck) */}
             <path d="M108,82 C112,78 118,80 120,84 C122,80 128,78 132,82 C130,90 124,90 120,88 C116,90 110,90 108,82 Z" {...paint("thyroid")} onClick={() => onPick("thyroid")}>
-              <title>Thyroid — {STATUS_LABEL[statusOf(byId.get("thyroid"))]}</title>
+              <title>{`Thyroid — ${STATUS_LABEL[statusOf(byId.get("thyroid"))]}`}</title>
             </path>
             {/* heart */}
             <path d="M120,128 C114,119 100,121 100,134 C100,148 120,160 120,160 C120,160 140,148 140,134 C140,121 126,119 120,128 Z" {...paint("heart")} onClick={() => onPick("heart")}>
-              <title>Heart — {STATUS_LABEL[statusOf(byId.get("heart"))]}</title>
+              <title>{`Heart — ${STATUS_LABEL[statusOf(byId.get("heart"))]}`}</title>
             </path>
             {/* liver */}
             <path d="M92,172 C92,164 138,167 150,174 C146,190 104,194 92,172 Z" {...paint("liver")} onClick={() => onPick("liver")}>
-              <title>Liver — {STATUS_LABEL[statusOf(byId.get("liver"))]}</title>
+              <title>{`Liver — ${STATUS_LABEL[statusOf(byId.get("liver"))]}`}</title>
             </path>
             {/* pancreas */}
             <path d="M98,196 C114,192 140,196 150,202 C141,211 112,209 98,203 Z" {...paint("pancreas")} onClick={() => onPick("pancreas")}>
-              <title>Pancreas — {STATUS_LABEL[statusOf(byId.get("pancreas"))]}</title>
+              <title>{`Pancreas — ${STATUS_LABEL[statusOf(byId.get("pancreas"))]}`}</title>
             </path>
             {/* kidneys (two lobes, same region) */}
             <g {...paint("kidney")} onClick={() => onPick("kidney")}>
               <path d="M98,216 C90,216 88,240 98,246 C106,242 106,220 98,216 Z" />
               <path d="M142,216 C150,216 152,240 142,246 C134,242 134,220 142,216 Z" />
-              <title>Kidneys — {STATUS_LABEL[statusOf(byId.get("kidney"))]}</title>
+              <title>{`Kidneys — ${STATUS_LABEL[statusOf(byId.get("kidney"))]}`}</title>
             </g>
             {/* bladder (pelvis) */}
             <path d="M110,270 C110,262 130,262 130,270 C130,282 122,286 120,286 C118,286 110,282 110,270 Z" {...paint("bladder")} onClick={() => onPick("bladder")}>
-              <title>Bladder / urinary — {STATUS_LABEL[statusOf(byId.get("bladder"))]}</title>
+              <title>{`Bladder / urinary — ${STATUS_LABEL[statusOf(byId.get("bladder"))]}`}</title>
             </path>
           </svg>
 
