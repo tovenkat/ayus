@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { RequestAccessButton } from "@/components/patients/request-access-button";
 import { UploadForPatient } from "@/components/patients/upload-for-patient";
+import { OrganAnatomySection } from "@/components/health/organ-anatomy-section";
 
 function fmtDate(d: Date | null): string {
   if (!d) return "—";
@@ -170,6 +171,9 @@ export default async function PatientDashboardPage({
           tone={outOfRangeCount > 0 ? "warn" : undefined}
         />
       </div>
+
+      {/* Interactive organ anatomy — colored by this patient's real results */}
+      <OrganAnatomySection userId={patient.id} />
 
       {/* Recent reports */}
       <Card>

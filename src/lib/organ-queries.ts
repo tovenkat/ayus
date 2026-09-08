@@ -19,6 +19,7 @@ export type OrganPanelResult = {
   latest: {
     resultId: string;
     reportId: string;
+    loincNum: string | null;
     valueRaw: string;
     valueNumeric: number | null;
     unit: string | null;
@@ -99,6 +100,7 @@ export async function getOrganPanels(userId: string): Promise<OrganPanel[]> {
         latest: {
           resultId: latest.id,
           reportId: latest.reportId,
+          loincNum: latest.loincNum,
           valueRaw: latest.observedValueRaw,
           valueNumeric: latest.observedValueNumeric,
           unit: latest.observedValueUnit,

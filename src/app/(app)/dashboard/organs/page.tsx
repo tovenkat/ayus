@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth-helpers";
 import { getOrganPanels, type OrganPanelResult } from "@/lib/organ-queries";
+import { OrganAnatomySection } from "@/components/health/organ-anatomy-section";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { H1, Muted } from "@/components/ui/typography";
@@ -68,6 +69,9 @@ export default async function OrganDashboardPage() {
           ← back to overview
         </Link>
       </div>
+
+      {/* Interactive anatomy — organs colored by real health status */}
+      <OrganAnatomySection userId={userId} />
 
       <div className="grid gap-4 md:grid-cols-2">
         {panels.map((panel) => {
