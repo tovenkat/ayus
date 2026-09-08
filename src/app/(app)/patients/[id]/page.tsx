@@ -15,13 +15,17 @@ import { ArrowLeft, UserRound, FileText, AlertTriangle, FlaskConical } from "luc
 import { requireAuth } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
 import { checkPatientAccess } from "@/lib/patient-roster";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { buildDashboardData } from "@/lib/dashboard-queries";
+import { buildRiskSummary } from "@/lib/risk-assessment";
+import { getOrganRegions } from "@/components/health/organ-anatomy-section";
+import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { RiskThermometer } from "@/components/dashboard/risk-thermometer";
+import { RecoveryPlan } from "@/components/dashboard/recovery-plan";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { RequestAccessButton } from "@/components/patients/request-access-button";
 import { UploadForPatient } from "@/components/patients/upload-for-patient";
-import { OrganAnatomySection } from "@/components/health/organ-anatomy-section";
 
 function fmtDate(d: Date | null): string {
   if (!d) return "—";
@@ -97,32 +101,18 @@ export default async function PatientDashboardPage({
   }
 
   // ── Consent GRANTED: load the record summary ─────────────────────────────
-  const [reports, latestResults, outOfRangeCount, testCount] = await Promise.all([
-    prisma.report.findMany({
-      where: { userId: patientId },
-      orderBy: [{ sampleCollectedOn: "desc" }, { createdAt: "desc" }],
-      take: 5,
-      select: {
-        id: true, sampleCollectedOn: true, referredBy: true, sampleType: true,
-        upload: { select: { originalName: true } },
-        _count: { select: { testResults: true } },
-      },
-    }),
-    prisma.testResult.findMany({
-      where: { userId: patientId },
-      orderBy: { createdAt: "desc" },
-      take: 20,
-      select: {
-        id: true, normalizedName: true, observedValueRaw: true, observedValueUnit: true,
-        referenceIntervalRaw: true, interpretation: true, isOutOfRange: true,
-      },
-    }),
-    prisma.testResult.count({ where: { userId: patientId, isOutOfRange: true } }),
+  // Same rich data the individual dashboard uses, built for the consented patient.
+  const [reportCount, testCount, outOfRangeCount, dashData, riskSummary, organRegions] = await Promise.all([
+    prisma.report.count({ where: { userId: patientId } }),
     prisma.testResult.count({ where: { userId: patientId } }),
+    prisma.testResult.count({ where: { userId: patientId, isOutOfRange: true } }),
+    buildDashboardData(patientId, { range: "all", abnormalOnly: false, worseningOnly: false }),
+    buildRiskSummary(patientId),
+    getOrganRegions(patientId),
   ]);
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6">
       <BackLink />
 
       {/* Identity header */}
@@ -162,7 +152,7 @@ export default async function PatientDashboardPage({
 
       {/* Stat tiles */}
       <div className="grid grid-cols-3 gap-3">
-        <StatTile icon={<FileText className="size-4" />} label="Reports" value={reports.length >= 5 ? "5+" : String(reports.length)} />
+        <StatTile icon={<FileText className="size-4" />} label="Reports" value={String(reportCount)} />
         <StatTile icon={<FlaskConical className="size-4" />} label="Test results" value={String(testCount)} />
         <StatTile
           icon={<AlertTriangle className="size-4" />}
@@ -172,80 +162,15 @@ export default async function PatientDashboardPage({
         />
       </div>
 
-      {/* Interactive organ anatomy — colored by this patient's real results */}
-      <OrganAnatomySection userId={patient.id} />
+      {/* Risk + recovery — same as the individual dashboard */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <RiskThermometer summary={riskSummary} />
+        <RecoveryPlan summary={riskSummary} />
+      </div>
 
-      {/* Recent reports */}
-      <Card>
-        <CardHeader><CardTitle className="text-base">Recent reports</CardTitle></CardHeader>
-        <CardContent>
-          {reports.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No reports on file.</p>
-          ) : (
-            <ul className="divide-y">
-              {reports.map((r) => (
-                <li key={r.id} className="py-2.5 flex items-center gap-3">
-                  <FileText className="size-4 text-muted-foreground shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium truncate">{r.upload.originalName}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {fmtDate(r.sampleCollectedOn)}
-                      {r.sampleType && <> · {r.sampleType}</>}
-                      {r.referredBy && <> · Ref: {r.referredBy}</>}
-                    </p>
-                  </div>
-                  <span className="text-xs text-muted-foreground shrink-0">{r._count.testResults} tests</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Latest results */}
-      <Card>
-        <CardHeader><CardTitle className="text-base">Latest results</CardTitle></CardHeader>
-        <CardContent className="px-0">
-          {latestResults.length === 0 ? (
-            <p className="text-sm text-muted-foreground px-6">No test results on file.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Test</TableHead>
-                    <TableHead>Value</TableHead>
-                    <TableHead>Reference</TableHead>
-                    <TableHead>Flag</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {latestResults.map((t) => (
-                    <TableRow key={t.id}>
-                      <TableCell className="font-medium">{t.normalizedName}</TableCell>
-                      <TableCell className="tabular-nums">
-                        {t.observedValueRaw}{t.observedValueUnit ? ` ${t.observedValueUnit}` : ""}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground tabular-nums">
-                        {t.referenceIntervalRaw ?? "—"}
-                      </TableCell>
-                      <TableCell>
-                        {t.isOutOfRange ? (
-                          <Badge variant="outline" className="text-amber-600 border-amber-500/30 bg-amber-500/10">
-                            {t.interpretation === "HIGH" ? "High" : t.interpretation === "LOW" ? "Low" : "Abnormal"}
-                          </Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Normal</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Full clinical dashboard: status pie + organ map + biomarker cards + trends.
+          patientId puts the shell in read-only mode (no self-scoped refetch). */}
+      <DashboardShell initialData={dashData} organRegions={organRegions} patientId={patient.id} />
     </div>
   );
 }

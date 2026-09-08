@@ -19,14 +19,19 @@ type CategoryFilter = "outOfRange" | "improving" | "worsening" | "stable" | null
 interface DashboardShellProps {
   initialData: DashboardData;
   organRegions?: RegionPanel[];
+  // When set, the shell renders another patient's data (roster view): the
+  // user-scoped /api/dashboard refetch and the range filters are disabled, and
+  // empty-state copy is neutral. Category highlighting still works client-side.
+  patientId?: string;
 }
 
-export function DashboardShell({ initialData, organRegions = [] }: DashboardShellProps) {
+export function DashboardShell({ initialData, organRegions = [], patientId }: DashboardShellProps) {
   const searchParams = useSearchParams();
   const [data, setData] = useState<DashboardData>(initialData);
   const [loading, setLoading] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>(null);
+  const readOnly = !!patientId; // roster view — no self-scoped refetch
 
   const fetchData = useCallback(async (params: string) => {
     setLoading(true);
@@ -46,8 +51,9 @@ export function DashboardShell({ initialData, organRegions = [] }: DashboardShel
       setInitialLoad(false);
       return;
     }
+    if (readOnly) return; // patient view is static — don't refetch the caller's data
     fetchData(searchParams.toString());
-  }, [searchParams, fetchData, initialLoad]);
+  }, [searchParams, fetchData, initialLoad, readOnly]);
 
   const isEmpty =
     data.tests.length === 0 &&
@@ -60,18 +66,22 @@ export function DashboardShell({ initialData, organRegions = [] }: DashboardShel
   if (isEmpty && !loading) {
     return (
       <div className="space-y-6">
-        <DashboardFilters categories={data.categories} />
+        {!readOnly && <DashboardFilters categories={data.categories} />}
         <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed p-16">
           <Upload className="h-10 w-10 text-muted-foreground" />
           <div className="text-center">
-            <p className="font-medium">No health data yet</p>
+            <p className="font-medium">No lab data yet</p>
             <p className="text-sm text-muted-foreground">
-              Upload your first lab report to start tracking your health trends.
+              {readOnly
+                ? "No lab results on record for this patient yet. Upload a report on their behalf to populate this view."
+                : "Upload your first lab report to start tracking your health trends."}
             </p>
           </div>
-          <Link href="/upload">
-            <Button>Upload Report</Button>
-          </Link>
+          {!readOnly && (
+            <Link href="/upload">
+              <Button>Upload Report</Button>
+            </Link>
+          )}
         </div>
       </div>
     );
@@ -79,7 +89,7 @@ export function DashboardShell({ initialData, organRegions = [] }: DashboardShel
 
   return (
     <div className="space-y-5">
-      <DashboardFilters categories={data.categories} />
+      {!readOnly && <DashboardFilters categories={data.categories} />}
 
       {loading ? (
         <div className="space-y-5">
