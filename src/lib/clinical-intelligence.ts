@@ -23,6 +23,11 @@ type Marker = {
   high: number | null;
   unit: string | null;
   date: Date | null;
+  prevDate: Date | null;
+  loincNum: string | null;   // provenance: coded identity of the source result
+  reportId: string | null;   // provenance: which report it came from
+  confidence: number | null; // validation: extraction confidence of the source
+  plausibility: string | null; // validation: plausibility flag, if any
 };
 export type PatientMarkers = { patientId: string; name: string; markers: Map<string, Marker> };
 
@@ -41,8 +46,9 @@ async function loadOrgPatientMarkers(orgId: string): Promise<PatientMarkers[]> {
       orderBy: [{ userId: "asc" }, { canonicalTestId: "asc" }, { report: { sampleCollectedOn: "desc" } }, { createdAt: "desc" }],
       select: {
         userId: true, observedValueNumeric: true, referenceLow: true, referenceHigh: true, observedValueUnit: true,
+        loincNum: true, confidence: true, plausibilityFlag: true,
         canonical: { select: { name: true } },
-        report: { select: { sampleCollectedOn: true } },
+        report: { select: { id: true, sampleCollectedOn: true } },
       },
     }),
   ]);
@@ -69,6 +75,11 @@ async function loadOrgPatientMarkers(orgId: string): Promise<PatientMarkers[]> {
       high: latest.referenceHigh,
       unit: latest.observedValueUnit,
       date: latest.report?.sampleCollectedOn ?? null,
+      prevDate: prev?.report?.sampleCollectedOn ?? null,
+      loincNum: latest.loincNum ?? null,
+      reportId: latest.report?.id ?? null,
+      confidence: latest.confidence ?? null,
+      plausibility: latest.plausibilityFlag ?? null,
     });
     byPatient.set(uid, m);
   }
@@ -87,6 +98,55 @@ const worseningAway = (m?: Marker) => {
 };
 const fmt = (m: Marker) => `${m.latest}${m.unit ? " " + m.unit : ""}`;
 
+// ─── Provenance: the exact source measurements behind a flag ─────────────────
+
+const LOW_CONFIDENCE = 0.6;
+
+export type Evidence = {
+  test: string;
+  value: number;
+  unit: string | null;
+  refRange: string | null;
+  loincNum: string | null;
+  date: string | null;
+  trend: "rising" | "falling" | null;
+  prevValue: number | null;
+  prevDate: string | null;
+  confidence: number | null;
+  unverified: boolean; // low extraction confidence or a plausibility flag
+};
+
+function refRange(m: Marker): string | null {
+  if (m.low !== null && m.high !== null) return `${m.low}–${m.high}`;
+  if (m.high !== null) return `< ${m.high}`;
+  if (m.low !== null) return `> ${m.low}`;
+  return null;
+}
+
+/** Turn the markers a flag relied on into traceable, validated evidence. */
+function buildEvidence(markers: Map<string, Marker>, tests: string[]): Evidence[] {
+  const out: Evidence[] = [];
+  for (const t of tests) {
+    const m = markers.get(t);
+    if (!m) continue;
+    const trend = m.prev === null ? null : m.latest > m.prev ? "rising" : m.latest < m.prev ? "falling" : null;
+    out.push({
+      test: t,
+      value: m.latest,
+      unit: m.unit,
+      refRange: refRange(m),
+      loincNum: m.loincNum,
+      date: m.date ? m.date.toISOString() : null,
+      trend,
+      prevValue: m.prev,
+      prevDate: m.prevDate ? m.prevDate.toISOString() : null,
+      confidence: m.confidence,
+      unverified: (m.confidence !== null && m.confidence < LOW_CONFIDENCE) || !!m.plausibility,
+    });
+  }
+  return out;
+}
+
 // ─── Care flags (combination CDS) ────────────────────────────────────────────
 
 export type Severity = "critical" | "high" | "moderate" | "low";
@@ -97,6 +157,8 @@ export type CareFlag = {
   title: string;
   reason: string;
   action: string;
+  evidence: Evidence[];    // provenance — the source measurements behind this flag
+  unverified: boolean;     // any evidence came from low-confidence extraction
 };
 
 const SEV_RANK: Record<Severity, number> = { critical: 0, high: 1, moderate: 2, low: 3 };
@@ -104,7 +166,8 @@ const SEV_RANK: Record<Severity, number> = { critical: 0, high: 1, moderate: 2, 
 /** Evaluate one patient's markers → zero or more care flags. */
 function evaluatePatient(p: PatientMarkers): CareFlag[] {
   const g = (n: string) => p.markers.get(n);
-  const flags: Omit<CareFlag, "patientId" | "patientName">[] = [];
+  type RawFlag = Omit<CareFlag, "patientId" | "patientName" | "evidence" | "unverified"> & { tests: string[] };
+  const flags: RawFlag[] = [];
 
   const hba1c = g("HbA1c");
   const creat = g("Creatinine");
@@ -117,37 +180,40 @@ function evaluatePatient(p: PatientMarkers): CareFlag[] {
 
   // Critical values — immediate attention.
   if (creat && creat.latest >= 4)
-    flags.push({ severity: "critical", title: "Critical renal impairment", reason: `Creatinine ${fmt(creat)}`, action: "Urgent nephrology review / assess for AKI." });
+    flags.push({ severity: "critical", title: "Critical renal impairment", reason: `Creatinine ${fmt(creat)}`, action: "Urgent nephrology review / assess for AKI.", tests: ["Creatinine"] });
   if (hb && hb.latest < 7)
-    flags.push({ severity: "critical", title: "Severe anemia", reason: `Hemoglobin ${fmt(hb)}`, action: "Assess for bleeding; consider transfusion workup." });
+    flags.push({ severity: "critical", title: "Severe anemia", reason: `Hemoglobin ${fmt(hb)}`, action: "Assess for bleeding; consider transfusion workup.", tests: ["Hemoglobin"] });
   if (hba1c && hba1c.latest >= 12)
-    flags.push({ severity: "critical", title: "Critical hyperglycemia", reason: `HbA1c ${fmt(hba1c)}`, action: "Urgent glycemic review; rule out DKA symptoms." });
+    flags.push({ severity: "critical", title: "Critical hyperglycemia", reason: `HbA1c ${fmt(hba1c)}`, action: "Urgent glycemic review; rule out DKA symptoms.", tests: ["HbA1c"] });
 
   // Combination findings — the point of CDS.
   if (hba1c && hba1c.latest >= 8 && creat && (creat.latest > (creat.high ?? 1.3) || rising(creat)))
-    flags.push({ severity: "high", title: "Diabetic nephropathy risk", reason: `HbA1c ${fmt(hba1c)}${rising(hba1c) ? " (worsening)" : ""} with creatinine ${fmt(creat)}${rising(creat) ? " (rising)" : ""}`, action: "Check ACR/eGFR; consider ACE-inhibitor/ARB and nephrology referral." });
+    flags.push({ severity: "high", title: "Diabetic nephropathy risk", reason: `HbA1c ${fmt(hba1c)}${rising(hba1c) ? " (worsening)" : ""} with creatinine ${fmt(creat)}${rising(creat) ? " (rising)" : ""}`, action: "Check ACR/eGFR; consider ACE-inhibitor/ARB and nephrology referral.", tests: ["HbA1c", "Creatinine"] });
   else if (hba1c && hba1c.latest >= 9)
-    flags.push({ severity: "high", title: "Uncontrolled diabetes", reason: `HbA1c ${fmt(hba1c)}${rising(hba1c) ? " (worsening)" : ""}`, action: "Intensify glycemic control; review adherence and therapy." });
+    flags.push({ severity: "high", title: "Uncontrolled diabetes", reason: `HbA1c ${fmt(hba1c)}${rising(hba1c) ? " (worsening)" : ""}`, action: "Intensify glycemic control; review adherence and therapy.", tests: ["HbA1c"] });
 
   if (creat && creat.latest > (creat.high ?? 1.3) && rising(creat) && !(hba1c && hba1c.latest >= 8))
-    flags.push({ severity: "high", title: "Progressive renal decline", reason: `Creatinine ${fmt(creat)} rising over consecutive reports`, action: "Trend eGFR; identify reversible causes; nephrology if sustained." });
+    flags.push({ severity: "high", title: "Progressive renal decline", reason: `Creatinine ${fmt(creat)} rising over consecutive reports`, action: "Trend eGFR; identify reversible causes; nephrology if sustained.", tests: ["Creatinine"] });
 
   if (alt && (alt.latest >= 150 || (alt.latest > (alt.high ?? 55) && rising(alt))))
-    flags.push({ severity: "high", title: "Hepatocellular injury", reason: `ALT ${fmt(alt)}${alt.latest >= 150 ? " (>3× ULN)" : " and rising"}`, action: "Evaluate hepatitis/drug causes; repeat LFTs; hepatology if persistent." });
+    flags.push({ severity: "high", title: "Hepatocellular injury", reason: `ALT ${fmt(alt)}${alt.latest >= 150 ? " (>3× ULN)" : " and rising"}`, action: "Evaluate hepatitis/drug causes; repeat LFTs; hepatology if persistent.", tests: ["ALT"] });
 
   if (ferr && ferr.latest < 15 && hb && hb.latest < 12)
-    flags.push({ severity: "moderate", title: "Iron-deficiency anemia", reason: `Ferritin ${fmt(ferr)} with hemoglobin ${fmt(hb)}`, action: "Start iron; investigate source of loss (GI/menstrual)." });
+    flags.push({ severity: "moderate", title: "Iron-deficiency anemia", reason: `Ferritin ${fmt(ferr)} with hemoglobin ${fmt(hb)}`, action: "Start iron; investigate source of loss (GI/menstrual).", tests: ["Ferritin", "Hemoglobin"] });
 
   if (tsh && (tsh.latest > (tsh.high ?? 4.5) || tsh.latest < (tsh.low ?? 0.4)))
-    flags.push({ severity: "moderate", title: tsh.latest > (tsh.high ?? 4.5) ? "Hypothyroidism" : "Thyrotoxicosis", reason: `TSH ${fmt(tsh)}${worseningAway(tsh) ? " (worsening)" : ""}`, action: "Confirm with free T4; titrate/again in 6–8 weeks." });
+    flags.push({ severity: "moderate", title: tsh.latest > (tsh.high ?? 4.5) ? "Hypothyroidism" : "Thyrotoxicosis", reason: `TSH ${fmt(tsh)}${worseningAway(tsh) ? " (worsening)" : ""}`, action: "Confirm with free T4; titrate/again in 6–8 weeks.", tests: ["TSH"] });
 
   if (ldl && ldl.latest >= 160)
-    flags.push({ severity: "moderate", title: "Severe dyslipidemia", reason: `LDL ${fmt(ldl)}`, action: "Assess ASCVD risk; initiate/intensify statin." });
+    flags.push({ severity: "moderate", title: "Severe dyslipidemia", reason: `LDL ${fmt(ldl)}`, action: "Assess ASCVD risk; initiate/intensify statin.", tests: ["LDL Cholesterol"] });
 
   if (vitd && vitd.latest < 20)
-    flags.push({ severity: "low", title: "Vitamin D deficiency", reason: `Vitamin D ${fmt(vitd)}`, action: "Supplement (cholecalciferol); recheck in 12 weeks." });
+    flags.push({ severity: "low", title: "Vitamin D deficiency", reason: `Vitamin D ${fmt(vitd)}`, action: "Supplement (cholecalciferol); recheck in 12 weeks.", tests: ["Vitamin D"] });
 
-  return flags.map((f) => ({ ...f, patientId: p.patientId, patientName: p.name }));
+  return flags.map(({ tests, ...f }): CareFlag => {
+    const evidence = buildEvidence(p.markers, tests);
+    return { ...f, patientId: p.patientId, patientName: p.name, evidence, unverified: evidence.some((e) => e.unverified) };
+  });
 }
 
 export async function getCareFlags(orgId: string): Promise<CareFlag[]> {

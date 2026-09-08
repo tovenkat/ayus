@@ -8,7 +8,7 @@
  */
 
 import Link from "next/link";
-import { AlertTriangle, Activity, ArrowRight, ClipboardList, ShieldPlus, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, Activity, ArrowRight, ClipboardList, ShieldPlus, CheckCircle2, FileSearch } from "lucide-react";
 import {
   getCareFlags, summarizeFlags, getDiseaseRegistries, getCareGaps, summarizeGaps,
   type Severity,
@@ -64,9 +64,32 @@ export async function ClinicalIntelligence({ orgId, flagLimit = 12 }: { orgId: s
                   <li key={`${f.patientId}-${i}`} className={`py-2.5 flex items-start gap-3 ${reviewed ? "opacity-60" : ""}`}>
                     <Badge variant="outline" className={`shrink-0 mt-0.5 ${SEV_STYLE[f.severity].badge}`}>{SEV_STYLE[f.severity].label}</Badge>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium">{f.title} <span className="text-muted-foreground font-normal">· {f.patientName}</span></p>
+                      <p className="text-sm font-medium">
+                        {f.title} <span className="text-muted-foreground font-normal">· {f.patientName}</span>
+                        {f.unverified && <Badge variant="outline" className="ml-1.5 text-[10px] text-orange-600 border-orange-500/30 bg-orange-500/10">unverified data</Badge>}
+                      </p>
                       <p className="text-xs text-muted-foreground">{f.reason}</p>
                       <p className="text-xs text-primary/90 mt-0.5">→ {f.action}</p>
+                      {f.evidence.length > 0 && (
+                        <details className="mt-1 group/ev">
+                          <summary className="text-[11px] text-muted-foreground cursor-pointer select-none hover:text-foreground list-none inline-flex items-center gap-1">
+                            <FileSearch className="size-3" /> Evidence ({f.evidence.length})
+                          </summary>
+                          <ul className="mt-1 space-y-0.5 border-l-2 border-muted pl-2.5">
+                            {f.evidence.map((e) => (
+                              <li key={e.test} className="text-[11px] text-muted-foreground tabular-nums">
+                                <span className="font-medium text-foreground">{e.test}</span>{" "}
+                                {e.value}{e.unit ? ` ${e.unit}` : ""}
+                                {e.refRange && <span className="text-muted-foreground/70"> (ref {e.refRange})</span>}
+                                {e.trend && <span className={e.trend === "rising" ? "text-orange-600" : "text-emerald-600"}> {e.trend === "rising" ? "↑" : "↓"}{e.prevValue !== null ? ` from ${e.prevValue}` : ""}</span>}
+                                {e.loincNum && <span className="text-muted-foreground/60"> · LOINC {e.loincNum}</span>}
+                                {e.date && <span className="text-muted-foreground/60"> · {new Date(e.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>}
+                                {e.confidence !== null && <span className={e.unverified ? "text-orange-600" : "text-muted-foreground/60"}> · conf {e.confidence.toFixed(2)}</span>}
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0 mt-0.5">
                       {reviewed ? (
