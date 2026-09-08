@@ -11,15 +11,17 @@ import { StatusAreaChart } from "./status-area-chart";
 import { DashboardFilters } from "./dashboard-filters";
 import { TestGrid } from "./test-grid";
 import { RecentTimeline } from "./recent-timeline";
+import { OrganAnatomy, type RegionPanel } from "@/components/health/organ-anatomy";
 import type { DashboardData } from "@/lib/dashboard-queries";
 
 type CategoryFilter = "outOfRange" | "improving" | "worsening" | "stable" | null;
 
 interface DashboardShellProps {
   initialData: DashboardData;
+  organRegions?: RegionPanel[];
 }
 
-export function DashboardShell({ initialData }: DashboardShellProps) {
+export function DashboardShell({ initialData, organRegions = [] }: DashboardShellProps) {
   const searchParams = useSearchParams();
   const [data, setData] = useState<DashboardData>(initialData);
   const [loading, setLoading] = useState(false);
@@ -94,16 +96,26 @@ export function DashboardShell({ initialData }: DashboardShellProps) {
         </div>
       ) : (
         <>
-          {/* Top row: Health Overview + Timeline + Recent Reports */}
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_1fr_300px]">
-            <HealthOverview
-              summary={data.summary}
-              selected={categoryFilter}
-              onSelect={setCategoryFilter}
-            />
-            <StatusAreaChart data={data.statusTimeline} />
-            <RecentTimeline reports={data.recentReports} />
-          </div>
+          {organRegions.length > 0 ? (
+            <>
+              {/* Pie (status breakdown) next to the interactive organ anatomy */}
+              <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                <HealthOverview summary={data.summary} selected={categoryFilter} onSelect={setCategoryFilter} />
+                <OrganAnatomy regions={organRegions} />
+              </div>
+              <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_300px]">
+                <StatusAreaChart data={data.statusTimeline} />
+                <RecentTimeline reports={data.recentReports} />
+              </div>
+            </>
+          ) : (
+            /* No organ-linked data yet — original 3-up layout */
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_1fr_300px]">
+              <HealthOverview summary={data.summary} selected={categoryFilter} onSelect={setCategoryFilter} />
+              <StatusAreaChart data={data.statusTimeline} />
+              <RecentTimeline reports={data.recentReports} />
+            </div>
+          )}
 
           {/* Test results grid — filtered by selected category */}
           <TestGrid

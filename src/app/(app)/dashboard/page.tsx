@@ -3,6 +3,7 @@ import { requireAuth } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
 import { buildDashboardData } from "@/lib/dashboard-queries";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { getOrganRegions } from "@/components/health/organ-anatomy-section";
 import { NameCaptureCard } from "@/components/dashboard/name-capture-card";
 import { RiskThermometer } from "@/components/dashboard/risk-thermometer";
 import { RecoveryPlan } from "@/components/dashboard/recovery-plan";
@@ -55,7 +56,7 @@ async function LabResultsSection({
     select: { name: true, email: true, phone: true },
   });
 
-  const [data, riskSummary] = await Promise.all([
+  const [data, riskSummary, organRegions] = await Promise.all([
     buildDashboardData(userId, {
       range: params.range ?? "all",
       from: params.from,
@@ -65,6 +66,7 @@ async function LabResultsSection({
       worseningOnly: params.worseningOnly === "true",
     }),
     buildRiskSummary(userId),
+    getOrganRegions(userId),
   ]);
 
   // Fallback chain: real name → first word of email → "there"
@@ -87,7 +89,7 @@ async function LabResultsSection({
         <RiskThermometer summary={riskSummary} />
         <RecoveryPlan summary={riskSummary} />
       </div>
-      <DashboardShell initialData={data} />
+      <DashboardShell initialData={data} organRegions={organRegions} />
     </div>
   );
 }

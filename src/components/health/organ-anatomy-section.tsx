@@ -18,9 +18,9 @@ function fmtRange(low: number | null, high: number | null): string | null {
   return null;
 }
 
-export async function OrganAnatomySection({ userId }: { userId?: string }) {
-  const uid = userId ?? (await requireAuth());
-  const panels = await getOrganPanels(uid);
+/** Build the serializable region panels for a user (reused by the client shell). */
+export async function getOrganRegions(userId: string): Promise<RegionPanel[]> {
+  const panels = await getOrganPanels(userId);
 
   // Group organ systems that share an svgRegionId (e.g. pancreas + metabolic).
   const byRegion = new Map<string, { organs: Set<string>; metrics: Map<string, OrganMetric> }>();
@@ -42,7 +42,7 @@ export async function OrganAnatomySection({ userId }: { userId?: string }) {
     byRegion.set(p.svgRegionId, g);
   }
 
-  const regions: RegionPanel[] = [...byRegion.entries()].map(([regionId, g]) => {
+  return [...byRegion.entries()].map(([regionId, g]) => {
     const metrics = [...g.metrics.values()];
     return {
       regionId,
@@ -52,7 +52,11 @@ export async function OrganAnatomySection({ userId }: { userId?: string }) {
       outOfRange: metrics.filter((m) => m.outOfRange).length,
     };
   });
+}
 
+export async function OrganAnatomySection({ userId }: { userId?: string }) {
+  const uid = userId ?? (await requireAuth());
+  const regions = await getOrganRegions(uid);
   if (regions.length === 0) return null;
   return <OrganAnatomy regions={regions} />;
 }
