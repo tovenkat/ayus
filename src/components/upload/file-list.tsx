@@ -160,10 +160,11 @@ export function FileList({ files }: { files: FileItem[] }) {
               </Button>
             )}
 
-            {/* View document link */}
-            {file.documentSlug && (
-              <Link href={`/wiki/${file.documentSlug}`}>
-                <Button variant="ghost" size="icon" className="h-8 w-8" title="View document">
+            {/* View link — prefer the report preview for extracted reports,
+                fall back to the wiki page for non-report documents. */}
+            {(file.reportId || file.documentSlug) && (
+              <Link href={file.reportId ? `/reports/${file.reportId}/review` : `/wiki/${file.documentSlug}`}>
+                <Button variant="ghost" size="icon" className="h-8 w-8" title={file.reportId ? "View report" : "View document"}>
                   <Eye className="h-4 w-4" />
                 </Button>
               </Link>
