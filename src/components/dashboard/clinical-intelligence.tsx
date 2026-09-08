@@ -14,7 +14,10 @@ import {
   type Severity,
 } from "@/lib/clinical-intelligence";
 import { getRecentlyConsultedPatientIds } from "@/lib/consults";
+import { suggestSpecialty } from "@/lib/referrals";
+import { prisma } from "@/lib/prisma";
 import { LogConsult } from "@/components/patients/log-consult";
+import { ReferPatient } from "@/components/patients/refer-patient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -26,8 +29,12 @@ const SEV_STYLE: Record<Severity, { badge: string; label: string }> = {
 };
 
 export async function ClinicalIntelligence({ orgId, flagLimit = 12 }: { orgId: string; flagLimit?: number }) {
-  const [flags, registries, gaps, consulted] = await Promise.all([
+  const [flags, registries, gaps, consulted, targets] = await Promise.all([
     getCareFlags(orgId), getDiseaseRegistries(orgId), getCareGaps(orgId), getRecentlyConsultedPatientIds(orgId),
+    prisma.organization.findMany({
+      where: { type: { in: ["DIAGNOSTIC_CENTER", "CLINIC", "HOSPITAL"] }, id: { not: orgId } },
+      select: { id: true, name: true }, take: 25,
+    }),
   ]);
   const summary = summarizeFlags(flags);
   const gapSummary = summarizeGaps(gaps);
@@ -65,7 +72,10 @@ export async function ClinicalIntelligence({ orgId, flagLimit = 12 }: { orgId: s
                       {reviewed ? (
                         <Badge variant="outline" className="text-emerald-600 border-emerald-500/30 bg-emerald-500/10"><CheckCircle2 className="size-3" /> Reviewed</Badge>
                       ) : (
-                        <LogConsult patientId={f.patientId} patientName={f.patientName} defaultDiagnosis={f.title} defaultNotes={`${f.reason}. Plan: ${f.action}`} />
+                        <>
+                          <LogConsult patientId={f.patientId} patientName={f.patientName} defaultDiagnosis={f.title} defaultNotes={`${f.reason}. Plan: ${f.action}`} />
+                          <ReferPatient patientId={f.patientId} patientName={f.patientName} defaultSpecialty={suggestSpecialty(f.title)} defaultReason={`${f.title}: ${f.reason}`} targets={targets} />
+                        </>
                       )}
                       <Link href={`/patients/${f.patientId}`} className="text-primary text-xs hover:underline inline-flex items-center gap-0.5">
                         Open <ArrowRight className="size-3" />

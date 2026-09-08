@@ -171,6 +171,7 @@ model User {
   orgMemberships OrganizationMember[]
   usageEvents    UsageEvent[]
   patientLinks   PatientLink[]        @relation("PatientLinks")
+  referrals      Referral[]           @relation("PatientReferrals")
 }
 
 model Account {
@@ -970,6 +971,39 @@ model Organization {
   uploads      Upload[]
   reports      Report[]
   doctorNotes  DoctorNote[]
+  referralsOut Referral[]   @relation("ReferralsOut")
+  referralsIn  Referral[]   @relation("ReferralsIn")
+}
+
+// Referral of a patient from one org to another org / specialty. Outbound for
+// the sender, inbound for the receiver; the receiving org accepts/declines.
+enum ReferralStatus {
+  PENDING
+  ACCEPTED
+  COMPLETED
+  DECLINED
+}
+
+model Referral {
+  id          String         @id @default(cuid())
+  patientId   String
+  fromOrgId   String
+  toOrgId     String?        // in-system receiving org
+  toOrgName   String?        // external provider (free text) when not in-system
+  specialty   Specialty      @default(GENERAL)
+  reason      String         @db.Text
+  status      ReferralStatus @default(PENDING)
+  createdById String?
+  createdAt   DateTime       @default(now())
+  respondedAt DateTime?
+
+  patient User          @relation("PatientReferrals", fields: [patientId], references: [id], onDelete: Cascade)
+  fromOrg Organization  @relation("ReferralsOut", fields: [fromOrgId], references: [id], onDelete: Cascade)
+  toOrg   Organization? @relation("ReferralsIn", fields: [toOrgId], references: [id], onDelete: SetNull)
+
+  @@index([fromOrgId, createdAt])
+  @@index([toOrgId, status])
+  @@index([patientId])
 }
 
 // Consent link between a roster org (lab / clinic / hospital) and a patient

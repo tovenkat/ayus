@@ -14,6 +14,7 @@ import { getFollowUpSummary } from "@/lib/lab-population";
 import { getCareFlags, summarizeFlags } from "@/lib/clinical-intelligence";
 import { ClinicalIntelligence } from "./clinical-intelligence";
 import { RecentConsults } from "./recent-consults";
+import { Referrals } from "./referrals";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,8 @@ export async function DoctorDashboard() {
       </div>
 
       <ClinicalIntelligence orgId={org.orgId} />
+
+      <Referrals orgId={org.orgId} />
 
       <RecentConsults orgId={org.orgId} />
 
