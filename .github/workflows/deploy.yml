@@ -1,0 +1,38 @@
+# Auto-deploy to the DigitalOcean droplet over SSH on every push to main.
+# Alternative to the self-hosted webhook (deploy/webhook.js) — use ONE of them,
+# not both (both would double-deploy). No inbound port needed on the droplet.
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   DROPLET_HOST      droplet IP or hostname
+#   DROPLET_USER      SSH user (e.g. root, or a docker-group user)
+#   DROPLET_SSH_KEY   a PRIVATE SSH key whose public key is in the droplet's
+#                     authorized_keys (generate a dedicated deploy key)
+#   DROPLET_SSH_PORT  optional (default 22)
+name: Deploy
+
+on:
+  push:
+    branches: [main] # match DEPLOY_BRANCH on the droplet if you change it
+  workflow_dispatch: {} # allow manual "Run workflow"
+
+# Serialize deploys — never run two at once; queue the next instead of cancelling.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USER }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          port: ${{ secrets.DROPLET_SSH_PORT || 22 }}
+          script_stop: true # fail the job if any command fails
+          command_timeout: 40m # first deploy pulls models + builds — allow time
+          script: |
+            cd /opt/ayus
+            bash deploy/deploy.sh

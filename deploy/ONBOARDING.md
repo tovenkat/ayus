@@ -60,8 +60,25 @@ In **GitHub → repo → Settings → Webhooks → Add webhook**:
 - Events: **Just the push event**
 
 Now every push to `DEPLOY_BRANCH` (default `main`) redeploys automatically.
-Prefer GitHub Actions over an open port? An SSH-based deploy job can call
-`deploy/deploy.sh` instead — ask and I'll add the workflow.
+
+### Alternative: GitHub Actions (SSH deploy — no open port)
+Prefer not to expose port 9000? Use the included workflow
+(`.github/workflows/deploy.yml`) instead — it SSHes in and runs `deploy.sh` on
+every push to `main`. **Use one or the other, not both** (both = double-deploy);
+if you go this route, don't enable `ayus-webhook`.
+
+Setup:
+```bash
+# On the droplet: create a deploy key and authorize it
+ssh-keygen -t ed25519 -f ~/.ssh/ayus_deploy -N ""
+cat ~/.ssh/ayus_deploy.pub >> ~/.ssh/authorized_keys
+cat ~/.ssh/ayus_deploy        # copy the PRIVATE key
+```
+In **GitHub → repo → Settings → Secrets and variables → Actions**, add:
+`DROPLET_HOST` (IP), `DROPLET_USER` (e.g. `root`), `DROPLET_SSH_KEY` (the private
+key above), and optionally `DROPLET_SSH_PORT`. Pushes to `main` now deploy via
+the Actions tab (serialized; watch runs there). The SSH user needs docker access
+(root, or a member of the `docker` group).
 
 ## 5. Backups (DB + uploads/PHI)
 Nightly `pg_dump` + an archive of the uploads volume, kept `BACKUP_RETAIN_DAYS`
