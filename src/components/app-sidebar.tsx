@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, Upload, BookOpen, Search, MessageSquare,
+  LayoutDashboard, Upload, BookOpen, Search, MessageSquare, MessageSquarePlus,
   Tags, Settings, Stethoscope, Pill, UtensilsCrossed, FileText,
   ClipboardList, Siren, Network, Users, ClipboardCheck, Building2,
   BedDouble, ScrollText, ShieldCheck, ActivitySquare,
@@ -36,6 +36,7 @@ const COMMON_MAIN: NavItem[] = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
 ];
 const COMMON_BOTTOM: NavItem[] = [
+  { title: "Feedback", href: "/feedback", icon: MessageSquarePlus },
   { title: "Settings", href: "/settings", icon: Settings },
 ];
 

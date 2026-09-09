@@ -172,6 +172,32 @@ model User {
   usageEvents    UsageEvent[]
   patientLinks   PatientLink[]        @relation("PatientLinks")
   referrals      Referral[]           @relation("PatientReferrals")
+  feedback       Feedback[]
+}
+
+// In-app feedback (feature request / problem report) from any account kind.
+// Persisted for the record and emailed to FEEDBACK_EMAIL when configured.
+enum FeedbackType {
+  FEATURE
+  PROBLEM
+  OTHER
+}
+
+model Feedback {
+  id             String       @id @default(cuid())
+  userId         String
+  organizationId String?
+  accountKind    String       // "patient" | "lab" | "doctor" | "hospital"
+  type           FeedbackType @default(OTHER)
+  subject        String
+  message        String       @db.Text
+  contactEmail   String?
+  emailedAt      DateTime?
+  createdAt      DateTime     @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
 }
 
 model Account {
