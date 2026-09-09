@@ -63,14 +63,38 @@ Now every push to `DEPLOY_BRANCH` (default `main`) redeploys automatically.
 Prefer GitHub Actions over an open port? An SSH-based deploy job can call
 `deploy/deploy.sh` instead — ask and I'll add the workflow.
 
+## 5. Backups (DB + uploads/PHI)
+Nightly `pg_dump` + an archive of the uploads volume, kept `BACKUP_RETAIN_DAYS`
+(default 14). Enable the timer:
+```bash
+sudo cp deploy/backup.service /etc/systemd/system/ayus-backup.service
+sudo cp deploy/backup.timer   /etc/systemd/system/ayus-backup.timer
+sudo systemctl enable --now ayus-backup.timer
+bash deploy/backup.sh                         # run one now to verify
+systemctl list-timers ayus-backup.timer       # confirm the schedule
+```
+Backups land in `/opt/ayus/backups/`. **Copy them off the droplet** — set
+`SPACES_BUCKET`/`SPACES_ENDPOINT` in `.env` (+ the `aws` CLI and credentials) and
+`backup.sh` pushes to DO Spaces automatically. A droplet-only backup won't
+survive the droplet dying.
+
+**Restore:**
+```bash
+# DB
+gunzip -c backups/db-<ts>.sql.gz | docker compose exec -T -e PGPASSWORD=$PW postgres psql -U $USER -d $DB
+# uploads
+docker run --rm -v ayus_uploads:/data -v "$PWD/backups":/backup alpine \
+  sh -c "cd /data && tar xzf /backup/uploads-<ts>.tar.gz"
+```
+
 ## Notes
 - **Migrations:** `deploy.sh` bootstraps a fresh DB from `init-db.sql`, then uses
   `prisma migrate deploy` for new migrations. Destructive schema changes should be
   reviewed manually.
-- **Uploads are PHI** and live on the `uploads` Docker volume (`/data/uploads`).
-  Back them up (and `pgdata`) — e.g. a nightly `docker run … | s3cmd put` to Spaces.
-- **CPU inference is slow.** Swap `EXTRACT_MODEL`/`OCR_MODEL` for smaller models in
-  `.env` if extraction is too slow, then redeploy.
+- **CPU inference:** the default `.env` uses a **3B extractor** (`qwen2.5:3b`) so a
+  report takes seconds, not minutes. OCR only runs on scanned PDFs. For better
+  extraction with more RAM/GPU, switch to the 7B preset in `.env` and redeploy.
+  Don't change `EMBED_MODEL` (its 768-dim output matches the pgvector column).
 - **Local-only AI:** new orgs default to `OLLAMA_LOCAL`. To use a cloud provider,
   set it per-org in settings (or change the org default).
 - **GLiNER/Docling sidecars** are off by default; add them as extra compose

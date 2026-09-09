@@ -1,0 +1,13 @@
+# Nightly backup (paired with backup.timer).
+#   sudo cp deploy/backup.{service,timer} /etc/systemd/system/
+#   (rename to ayus-backup.* if you prefer)
+#   sudo systemctl enable --now ayus-backup.timer
+#   systemctl list-timers ayus-backup.timer   # confirm schedule
+[Unit]
+Description=Ayus DB + uploads backup
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/ayus
+ExecStart=/usr/bin/env bash /opt/ayus/deploy/backup.sh
