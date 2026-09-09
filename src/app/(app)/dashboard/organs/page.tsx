@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth-helpers";
+import { getAccountKind, hasPatientRoster } from "@/lib/account-kind";
 import { getOrganPanels, type OrganPanelResult } from "@/lib/organ-queries";
 import { OrganAnatomySection } from "@/components/health/organ-anatomy-section";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Users } from "lucide-react";
 import { H1, Muted } from "@/components/ui/typography";
 import {
   Droplets, Leaf, Zap, Heart, Activity, Droplet, TestTube, Waves, GlassWater,
@@ -40,6 +43,31 @@ function trendIcon(history: OrganPanelResult["history"]) {
 
 export default async function OrganDashboardPage() {
   const userId = await requireAuth();
+
+  // Roster accounts (lab/doctor/hospital) have no personal health data — the
+  // organ view is per-patient. Point them to a patient instead of the empty
+  // "upload a report" message meant for individuals.
+  const kind = await getAccountKind(userId);
+  if (hasPatientRoster(kind)) {
+    return (
+      <div className="max-w-3xl mx-auto space-y-4">
+        <H1 className="text-3xl">Organ view</H1>
+        <Card>
+          <CardContent className="py-16 text-center space-y-4">
+            <p className="font-medium">Organ view is per-patient</p>
+            <Muted>
+              Your account manages other people&apos;s records. Open a patient from your roster to
+              see their interactive organ map with biomarkers grouped by system.
+            </Muted>
+            <Button nativeButton={false} render={<Link href="/patients" />}>
+              <Users className="size-4" /> Go to patients
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   const panels = await getOrganPanels(userId);
 
   if (panels.length === 0) {
