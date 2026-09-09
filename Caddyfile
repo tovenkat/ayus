@@ -1,0 +1,10 @@
+# Reverse proxy with automatic HTTPS (Let's Encrypt).
+# DOMAIN is injected from .env (e.g. ayus.example.com). For a quick IP-only
+# test, set DOMAIN=:80 to serve plain HTTP without certificates.
+{$DOMAIN} {
+	encode zstd gzip
+	request_body {
+		max_size 60MB
+	}
+	reverse_proxy app:3000
+}

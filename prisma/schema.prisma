@@ -994,8 +994,11 @@ model Organization {
   brandColor String?
 
   // Org-level AI defaults (members inherit if their user fields are null)
-  defaultAiProvider AiProvider @default(GEMINI)
-  defaultAiModel    String     @default("gemini-2.5-flash")
+  // Local-first default: new orgs use the on-device Ollama models (role-specific
+  // EXTRACT_MODEL/OCR_MODEL/CHAT_MODEL from env). Set per-org to a cloud provider
+  // to use Gemini/OpenAI/etc. Empty model → the resolver picks the role's env model.
+  defaultAiProvider AiProvider @default(OLLAMA_LOCAL)
+  defaultAiModel    String     @default("")
   byokKeyEncrypted  String? // org-wide BYOK (Clinic tier+)
 
   createdAt DateTime @default(now())

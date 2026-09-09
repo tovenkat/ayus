@@ -67,3 +67,4 @@ scripts/*-sidecar/.venv/
 # python bytecode
 __pycache__/
 *.pyc
+!.env.production.example

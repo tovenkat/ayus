@@ -29,7 +29,9 @@ class LocalStorage implements StorageProvider {
 }
 
 function createStorage(): StorageProvider {
-  const uploadsDir = path.join(process.cwd(), "uploads");
+  // UPLOADS_DIR lets prod point at a persistent volume (PHI must not live on an
+  // ephemeral container filesystem). Defaults to ./uploads for local dev.
+  const uploadsDir = process.env.UPLOADS_DIR?.trim() || path.join(process.cwd(), "uploads");
   return new LocalStorage(uploadsDir);
 }
 

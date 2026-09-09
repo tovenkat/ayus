@@ -1,0 +1,20 @@
+# systemd unit for the GitHub deploy webhook.
+#   sudo cp deploy/webhook.service /etc/systemd/system/ayus-webhook.service
+#   sudo systemctl enable --now ayus-webhook
+#   journalctl -u ayus-webhook -f      # watch deploys
+# Assumes the repo is checked out at /opt/ayus (adjust WorkingDirectory if not).
+[Unit]
+Description=Ayus GitHub deploy webhook
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/ayus
+EnvironmentFile=/opt/ayus/.env
+ExecStart=/usr/bin/node /opt/ayus/deploy/webhook.js
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

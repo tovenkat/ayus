@@ -1,0 +1,17 @@
+node_modules
+.next
+.git
+.env
+.env.*
+!.env.production.example
+uploads
+MedRecords
+ionic
+.lancedb
+*.traineddata
+.mcp.json
+scripts/*-sidecar/.venv
+**/__pycache__
+npm-debug.log*
+.DS_Store
+deploy/*.log
