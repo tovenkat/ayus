@@ -67,6 +67,7 @@ export function WikiGraph({ graph }: Props) {
     new Set(Object.keys(KIND_COLOR) as GraphNodeKind[]),
   );
   const draggingRef = useRef<{ id: string | null; offsetX: number; offsetY: number }>({ id: null, offsetX: 0, offsetY: 0 });
+  const movedRef = useRef(false); // distinguishes a drag from a click
   const panRef = useRef<{ active: boolean; startX: number; startY: number; tx: number; ty: number }>({
     active: false, startX: 0, startY: 0, tx: 0, ty: 0,
   });
@@ -210,6 +211,7 @@ export function WikiGraph({ graph }: Props) {
 
   const onMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
     if (draggingRef.current.id) {
+      movedRef.current = true; // it's a drag, not a click
       const svg = svgRef.current;
       if (!svg) return;
       const rect = svg.getBoundingClientRect();
@@ -269,6 +271,30 @@ export function WikiGraph({ graph }: Props) {
     }
     return counts;
   }, [graph.nodes]);
+
+  // Adjacency for hover-focus: which nodes are directly linked to each node.
+  const adjacency = useMemo(() => {
+    const adj = new Map<string, Set<string>>();
+    for (const e of graph.edges) {
+      (adj.get(e.source) ?? adj.set(e.source, new Set()).get(e.source)!).add(e.target);
+      (adj.get(e.target) ?? adj.set(e.target, new Set()).get(e.target)!).add(e.source);
+    }
+    return adj;
+  }, [graph.edges]);
+
+  // When hovering a node, the "focus set" = that node + its direct neighbors.
+  // Everything else dims so a single biomarker's connections are legible in a
+  // dense graph. Null when nothing is hovered (everything at full strength).
+  const focusSet = useMemo(() => {
+    if (!hovered) return null;
+    const s = new Set<string>([hovered]);
+    for (const id of adjacency.get(hovered) ?? []) s.add(id);
+    return s;
+  }, [hovered, adjacency]);
+
+  // Labels are noisy when every node shows one. Default to labeling only the
+  // navigational hubs (lab reports + index); reveal the rest on hover/search.
+  const isHubKind = (k: GraphNodeKind) => k === "lab-report" || k === "index" || k === "encounter";
 
   return (
     <Card className="overflow-hidden">
@@ -344,7 +370,10 @@ export function WikiGraph({ graph }: Props) {
                 const srcVisible = visibleNodeIds.has(e.source.id);
                 const tgtVisible = visibleNodeIds.has(e.target.id);
                 if (!srcVisible || !tgtVisible) return null;
-                const highlighted = hovered && (hovered === e.source.id || hovered === e.target.id);
+                const touchesHover = hovered === e.source.id || hovered === e.target.id;
+                // In focus mode, only edges touching the hovered node show;
+                // the rest fade right back so the neighborhood stands out.
+                const dimmed = focusSet && !touchesHover;
                 return (
                   <line
                     key={i}
@@ -352,9 +381,9 @@ export function WikiGraph({ graph }: Props) {
                     y1={e.source.y}
                     x2={e.target.x}
                     y2={e.target.y}
-                    stroke={highlighted ? "var(--primary)" : "currentColor"}
-                    strokeWidth={highlighted ? 1.5 : 0.8}
-                    opacity={highlighted ? 0.8 : 0.25}
+                    stroke={touchesHover ? "var(--primary)" : "currentColor"}
+                    strokeWidth={touchesHover ? 1.5 : 0.8}
+                    opacity={touchesHover ? 0.85 : dimmed ? 0.04 : 0.22}
                     className="text-muted-foreground"
                   />
                 );
@@ -364,8 +393,15 @@ export function WikiGraph({ graph }: Props) {
                 if (!visibleNodeIds.has(n.id)) return null;
                 const r = 5 + Math.min(8, Math.sqrt(n.degree) * 2);
                 const isHovered = hovered === n.id;
+                const inFocus = !focusSet || focusSet.has(n.id);
+                const isNeighbor = !!focusSet && focusSet.has(n.id) && !isHovered;
+                // Label: hubs always; the hovered node + its neighbors; and any
+                // search match. Keeps a dense graph readable instead of a wall
+                // of overlapping text.
+                const showLabel =
+                  isHovered || isNeighbor || !!query || (isHubKind(n.kind) && !focusSet);
                 return (
-                  <g key={n.id}>
+                  <g key={n.id} opacity={inFocus ? 1 : 0.2}>
                     <circle
                       cx={n.x}
                       cy={n.y}
@@ -378,17 +414,18 @@ export function WikiGraph({ graph }: Props) {
                       onMouseLeave={() => setHovered(null)}
                       onMouseDown={(e) => {
                         e.stopPropagation();
+                        movedRef.current = false;
                         draggingRef.current = { id: n.id, offsetX: 0, offsetY: 0 };
                       }}
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (draggingRef.current.id === n.id) {
-                          draggingRef.current.id = null;
-                        }
-                        router.push(`/wiki/${n.slug}`);
+                        const wasDrag = movedRef.current;
+                        draggingRef.current.id = null;
+                        movedRef.current = false;
+                        if (!wasDrag) router.push(`/wiki/${n.slug}`); // click opens; drag doesn't
                       }}
                     />
-                    {(isHovered || n.degree >= 4 || query) && (
+                    {showLabel && (
                       <text
                         x={n.x}
                         y={n.y - r - 6}
@@ -422,7 +459,7 @@ export function WikiGraph({ graph }: Props) {
           <span>
             {graph.nodes.length} node{graph.nodes.length === 1 ? "" : "s"} · {graph.edges.length} link{graph.edges.length === 1 ? "" : "s"}
           </span>
-          <span>Drag nodes · scroll to zoom · click to open · toggle types above</span>
+          <span>Hover to focus connections · drag to reposition · click to open · scroll to zoom</span>
         </div>
       </CardContent>
     </Card>
