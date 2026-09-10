@@ -60,11 +60,17 @@ export async function requestOtp(rawPhone: string): Promise<{ phone: string; dem
     console.log(`[otp:DEMO] phone=${phone} code=${code}`);
   }
 
+  // Surface the code to the UI so it can pre-fill the input. Always safe in dev.
+  // In production we only do this for demo logins AND only when explicitly opted
+  // in via DEMO_OTP_AUTOFILL=true — so real OTPs are never leaked to the client.
+  const autofill =
+    useDemo &&
+    (process.env.NODE_ENV !== "production" || process.env.DEMO_OTP_AUTOFILL === "true");
+
   return {
     phone,
     demo: useDemo,
-    // Only surfaced in dev so the demo UI can pre-fill the input
-    sentCodeForDev: useDemo && process.env.NODE_ENV !== "production" ? code : undefined,
+    sentCodeForDev: autofill ? code : undefined,
   };
 }
 
