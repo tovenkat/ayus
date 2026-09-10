@@ -223,6 +223,32 @@ async function seedVisits(userId: string) {
   return 3;
 }
 
+/**
+ * Let the demo personal account use a cloud "Internet LLM" for chat/RAG:
+ *   • Turn OFF privacy mode (it forces everything to local Ollama and greys out
+ *     the provider cards in Settings → AI).
+ *   • Upgrade the individual org to the PERSONAL tier, which unlocks the cloud
+ *     providers + BYOK (FREE is "Local Ollama only", so the cards are disabled).
+ * The user still picks a provider and (per BYOK) pastes a key in Settings — or
+ * set INTERNET_LLM + its API key in .env to make it work with no key entry.
+ */
+async function enableInternetLlm(userId: string) {
+  await prisma.user.update({ where: { id: userId }, data: { privacyMode: false } });
+
+  const membership = await prisma.organizationMember.findFirst({
+    where: { userId, organization: { type: "INDIVIDUAL" } },
+    select: { organizationId: true },
+  });
+  if (!membership) return "no individual org";
+
+  const { PRICING } = await import("../src/lib/pricing");
+  await prisma.subscription.update({
+    where: { organizationId: membership.organizationId },
+    data: { tier: "PERSONAL", reportsPerMonth: PRICING.PERSONAL.reportsPerMonth },
+  });
+  return "PERSONAL tier + privacy off";
+}
+
 async function main() {
   const user = await prisma.user.findUnique({ where: { phone: PHONE }, select: { id: true, name: true } });
   if (!user) throw new Error(`User ${PHONE} not found — run \`npm run dummy:seed\` first.`);
@@ -231,11 +257,12 @@ async function main() {
   const meds = await seedMedications(user.id);
   const meals = await seedMeals(user.id);
   const visits = await seedVisits(user.id);
+  const ai = await enableInternetLlm(user.id);
 
   console.log(
     `[personal-demo] ${user.name ?? PHONE}: ${reports} reports, ${results} results, ` +
-    `${meds} medications, ${meals} meals, ${visits} doctor visits (1 upcoming follow-up). ` +
-    `Log in as ${PHONE} → /dashboard.`,
+    `${meds} medications, ${meals} meals, ${visits} doctor visits (1 upcoming follow-up); ` +
+    `AI: ${ai}. Log in as ${PHONE} → /dashboard.`,
   );
 }
 
