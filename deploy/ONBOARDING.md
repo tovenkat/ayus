@@ -64,6 +64,35 @@ Re-seed manually anytime: `docker compose run --rm migrate npm run seed:demo`.
 them, copy the CSVs to `ionic/` on the droplet and run
 `docker compose run --rm migrate sh -c "npm run loinc:seed && npm run diseases:seed"`.
 
+### Optional: GLiNER NER sidecar (clinical text)
+GLiNER-BioMed extracts entities (diseases, medications, lab tests, anatomy) from
+**narrative** clinical documents — prescriptions, doctor notes, imaging reports.
+Lab reports use the structured-table path and don't need it. It's **off by
+default**; enable it only on a droplet with spare RAM (**8 GB+**; the model is a
+PyTorch transformer).
+
+Turn it on in `.env` and redeploy:
+```bash
+cd /opt/ayus
+sed -i 's/^ENABLE_GLINER=.*/ENABLE_GLINER=true/' .env || echo "ENABLE_GLINER=true" >> .env
+bash deploy/deploy.sh        # builds + starts the "gliner" sidecar (profile-gated)
+```
+`deploy.sh` activates the compose `gliner` profile and the app reaches it at
+`http://gliner:8001` automatically — no URL to set. The **first** build pulls
+PyTorch and the first start downloads ~500 MB of model weights (cached in the
+`hf_cache` volume thereafter), so the first deploy takes a few extra minutes.
+
+Verify and watch it:
+```bash
+DC="docker compose -f docker-compose.yml -f docker-compose.nginx.yml --profile gliner"
+$DC logs -f gliner           # model loading on first start
+$DC exec -T gliner python -c "import urllib.request;print(urllib.request.urlopen('http://localhost:8001/health').read())"
+```
+Then upload a prescription/doctor-note PDF — extraction classifies it and adds
+medications/findings from the NER entities. On a GPU droplet set
+`GLINER_DEVICE=cuda` in `.env`. To turn it off: set `ENABLE_GLINER=false` and
+redeploy (the sidecar won't start).
+
 ## 4. Wire the GitHub webhook (auto-deploy on push)
 ```bash
 sudo cp deploy/webhook.service /etc/systemd/system/ayus-webhook.service
