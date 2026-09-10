@@ -1,6 +1,10 @@
 import type { NextAuthConfig } from "next-auth";
 
 export const authConfig = {
+  // Behind a reverse proxy (host Nginx / Caddy) NextAuth must trust the
+  // X-Forwarded-Host/Proto headers, otherwise it rejects the request with
+  // UntrustedHost → the generic "problem with the server configuration" page.
+  trustHost: true,
   session: { strategy: "jwt" },
   pages: {
     signIn: "/login",
