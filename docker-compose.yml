@@ -47,6 +47,10 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
       OLLAMA_HOST: http://ollama:11434
       UPLOADS_DIR: /data/uploads
+      # Reach the GLiNER sidecar over the internal network (only used when
+      # ENABLE_GLINER=true and the "gliner" profile is up). Harmless otherwise —
+      # the client fails fast and skips NER if the sidecar isn't reachable.
+      GLINER_SIDECAR_URL: http://gliner:8001
     volumes:
       - uploads:/data/uploads
     depends_on:
@@ -70,6 +74,29 @@ services:
     profiles: ["tools"]
     command: ["npx", "prisma", "migrate", "deploy"]
 
+  # GLiNER-BioMed NER sidecar (biomedical entity extraction for clinical text).
+  # Opt-in: only starts under the "gliner" profile (deploy.sh activates it when
+  # ENABLE_GLINER=true). Internal-only; the app reaches it at http://gliner:8001.
+  # First build pulls PyTorch (large) and first start downloads model weights
+  # (~500 MB) into the hf_cache volume.
+  gliner:
+    build: ./scripts/gliner-sidecar
+    restart: unless-stopped
+    profiles: ["gliner"]
+    environment:
+      GLINER_MODEL: ${GLINER_MODEL:-Ihor/gliner-biomed-base-v1.0}
+      GLINER_DEVICE: ${GLINER_DEVICE:-cpu}
+      GLINER_THRESHOLD: ${GLINER_THRESHOLD:-0.5}
+      GLINER_LABELS: ${GLINER_LABELS:-lab test,biomarker,disease,medication,anatomical site}
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 180s
+
   caddy:
     image: caddy:2
     restart: unless-stopped
@@ -91,3 +118,4 @@ volumes:
   uploads:
   caddy_data:
   caddy_config:
+  hf_cache: # GLiNER model weights (HuggingFace cache), persisted across restarts

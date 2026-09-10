@@ -14,12 +14,16 @@ PGUSER="$(val POSTGRES_USER)"; PGDB="$(val POSTGRES_DB)"; PGPW="$(val POSTGRES_P
 COMPUTE_MODE="$(val COMPUTE_MODE)"; COMPUTE_MODE="${COMPUTE_MODE:-cpu}"
 REVERSE_PROXY="$(val REVERSE_PROXY)"; REVERSE_PROXY="${REVERSE_PROXY:-caddy}"
 MODELS="$(val OLLAMA_MODELS)"; MODELS="${MODELS:-qwen2.5:7b-instruct deepseek-ocr:latest nomic-embed-text}"
+GLINER="$(val ENABLE_GLINER)"  # "true" → run the GLiNER NER sidecar
 
 COMPOSE="-f docker-compose.yml"
 [ "$COMPUTE_MODE" = "gpu" ] && COMPOSE="$COMPOSE -f docker-compose.gpu.yml"
 # nginx mode: app on 127.0.0.1:3000, caddy releases 80/443 (host Nginx fronts).
 [ "$REVERSE_PROXY" = "nginx" ] && COMPOSE="$COMPOSE -f docker-compose.nginx.yml"
-dc() { docker compose $COMPOSE "$@"; }
+# GLiNER sidecar lives behind a compose profile — activate it when enabled.
+PROFILES=""
+[ "$GLINER" = "true" ] && PROFILES="--profile gliner"
+dc() { docker compose $COMPOSE $PROFILES "$@"; }
 psql_c() { dc exec -T -e PGPASSWORD="$PGPW" postgres psql -U "$PGUSER" -d "$PGDB" "$@"; }
 
 # ── pull latest code ──────────────────────────────────────────────────────────
@@ -28,8 +32,9 @@ git fetch --prune origin "$BRANCH"
 git reset --hard "origin/$BRANCH"
 
 # ── build images ──────────────────────────────────────────────────────────────
-log "building images"
-dc build app migrate
+GLINER_SVC=""; [ "$GLINER" = "true" ] && GLINER_SVC="gliner"
+log "building images${GLINER_SVC:+ (incl. gliner sidecar)}"
+dc build app migrate $GLINER_SVC
 
 # ── datastores up + wait for postgres ──────────────────────────────────────────
 log "starting postgres + ollama"
@@ -64,12 +69,13 @@ for m in $MODELS; do dc exec -T ollama ollama pull "$m" || true; done
 
 # ── restart app + proxy ─────────────────────────────────────────────────────────
 if [ "$REVERSE_PROXY" = "nginx" ]; then
-  log "starting app (host Nginx fronts it on 127.0.0.1:${APP_PORT:-3000})"
-  dc up -d app
+  log "starting app${GLINER_SVC:+ + gliner} (host Nginx fronts it on 127.0.0.1:${APP_PORT:-3000})"
+  dc up -d app $GLINER_SVC
 else
-  log "starting app + caddy"
-  dc up -d app caddy
+  log "starting app + caddy${GLINER_SVC:+ + gliner}"
+  dc up -d app caddy $GLINER_SVC
 fi
+[ -n "$GLINER_SVC" ] && log "GLiNER sidecar up (first start downloads model weights — see \`docker compose logs gliner\`)"
 
 log "pruning old images"
 docker image prune -f >/dev/null 2>&1 || true
