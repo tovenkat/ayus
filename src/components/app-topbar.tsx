@@ -30,7 +30,7 @@ export function AppTopbar() {
     <header className="flex h-14 items-center gap-3 border-b px-4">
       <SidebarTrigger />
       <Separator orientation="vertical" className="h-6" />
-      <Link href="/" aria-label="Ayus home" className="hidden sm:flex rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <Link href="/dashboard" aria-label="Go to dashboard" className="hidden sm:flex rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring">
         <Logo size="sm" showText={false} />
       </Link>
       <div className="flex-1 flex justify-center max-w-md mx-auto">

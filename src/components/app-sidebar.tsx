@@ -160,7 +160,7 @@ export function AppSidebar({ kind }: Props) {
   return (
     <Sidebar>
       <SidebarHeader className="border-b px-6 py-4">
-        <Link href="/" aria-label="Ayus home">
+        <Link href="/dashboard" aria-label="Go to dashboard">
           <Logo size="sm" />
         </Link>
         {kind !== "personal" && kind !== "unknown" && (
