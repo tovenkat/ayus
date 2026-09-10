@@ -73,7 +73,7 @@ function SiteNav() {
           <a href="#clinics" className="hover:text-foreground">For clinics</a>
         </nav>
         <div className="flex items-center gap-2">
-          <Link href="/login" className="hidden sm:block">
+          <Link href="/login">
             <Button variant="ghost" size="sm">Sign in</Button>
           </Link>
           <Link href="/register">
