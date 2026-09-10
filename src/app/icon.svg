@@ -1,0 +1,27 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="ayus-bg" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1aa86f"/>
+      <stop offset="100%" stop-color="#24b6b0"/>
+    </linearGradient>
+    <linearGradient id="ayus-shine" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded-square brand tile -->
+  <rect width="48" height="48" rx="11" fill="url(#ayus-bg)"/>
+  <rect width="48" height="48" rx="11" fill="url(#ayus-shine)"/>
+
+  <!-- Leaf + heart silhouette (bolder than the full logo so it reads at 16px) -->
+  <path
+    d="M24 39 C16.5 31.5 9.5 25.5 9.5 17.5 C9.5 12.2 12.8 8.2 18 8.2 C22 8.2 24 11.4 24 11.4 C24 11.4 28 5.6 34 7.8 C40 10 41 16.2 38.8 22.2 C36.6 28 30 33 24 39 Z"
+    fill="#ffffff" fill-opacity="0.22"/>
+
+  <!-- Pulse / ECG across the midrib -->
+  <polyline
+    points="11,23 16.5,23 18.8,18 21.5,29 24,15 26.8,27 29.8,21.5 33,23 37.5,23"
+    fill="none" stroke="#ffffff" stroke-width="2.8"
+    stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
