@@ -31,8 +31,9 @@ jobs:
           username: ${{ secrets.DROPLET_USER }}
           key: ${{ secrets.DROPLET_SSH_KEY }}
           port: ${{ secrets.DROPLET_SSH_PORT || 22 }}
-          script_stop: true # fail the job if any command fails
           command_timeout: 40m # first deploy pulls models + builds — allow time
+          # deploy.sh runs `set -euo pipefail`, so a failed command fails the job.
           script: |
+            set -e
             cd /opt/ayus
             bash deploy/deploy.sh
