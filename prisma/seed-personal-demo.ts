@@ -22,22 +22,61 @@ const PHONE = "+910000000001";
 // 6 report timepoints, oldest → newest (months ago).
 const TIMEPOINTS = [14, 11, 8, 5, 3, 1];
 
-// name, unit, refLow, refHigh, then 6 values (oldest → newest).
-// The story: an improving prediabetic/dyslipidemic patient on treatment.
-const LABS: [string, string, number | null, number | null, number[]][] = [
-  ["HbA1c",            "%",       4.0, 5.6,  [6.4, 6.3, 6.1, 6.0, 5.9, 5.8]],   // pancreas/metabolic — high, improving
-  ["Fasting Glucose",  "mg/dL",   70,  100,  [118, 114, 110, 106, 102, 98]],    // metabolic — high → normal
-  ["Total Cholesterol","mg/dL",   null,200,  [228, 220, 212, 205, 196, 188]],   // lipid — high → normal
-  ["LDL Cholesterol",  "mg/dL",   null,100,  [150, 145, 138, 130, 122, 110]],   // lipid — high, improving
-  ["HDL Cholesterol",  "mg/dL",   40,  null, [38, 39, 41, 43, 45, 47]],         // lipid — low → normal
-  ["Triglycerides",    "mg/dL",   null,150,  [190, 180, 170, 160, 150, 140]],   // lipid — high → normal
-  ["ALT",              "U/L",     0,   55,   [68, 64, 60, 55, 50, 45]],         // liver — high, improving
-  ["AST",              "U/L",     0,   40,   [52, 48, 44, 40, 37, 34]],         // liver — high → normal
-  ["Creatinine",       "mg/dL",   0.7, 1.3,  [1.0, 1.0, 1.1, 1.0, 1.1, 1.0]],   // kidney — normal
-  ["TSH",              "µIU/mL",  0.4, 4.5,  [3.0, 3.1, 3.2, 3.0, 2.9, 3.1]],   // thyroid — normal
-  ["Hemoglobin",       "g/dL",    13,  17,   [14.2, 14.4, 14.6, 14.8, 15.0, 15.1]], // blood — normal
-  ["Vitamin D",        "ng/mL",   30,  100,  [18, 20, 23, 26, 30, 34]],         // vitamins — low → normal
-  ["Vitamin B12",      "pg/mL",   200, 900,  [210, 240, 280, 320, 360, 400]],   // vitamins — low → normal
+// name, unit, refLow, refHigh, then 6 values (oldest → newest). String values
+// are qualitative (urinalysis) — stored with no numeric/range, always NORMAL.
+// The panel spans ALL 16 organ systems so every region on the anatomy map
+// lights up. Story: an improving prediabetic/dyslipidemic patient on treatment,
+// with a few mild flags (uric acid, CRP, ESR) that also normalise.
+type LabRow = [string, string, number | null, number | null, (number | string)[]];
+const LABS: LabRow[] = [
+  // ── Pancreas / Metabolic ──
+  ["HbA1c",            "%",       4.0, 5.6,  [6.4, 6.3, 6.1, 6.0, 5.9, 5.8]],   // high, improving
+  ["Fasting Glucose",  "mg/dL",   70,  100,  [118, 114, 110, 106, 102, 98]],    // high → normal
+  // ── Heart / Lipids ──
+  ["Total Cholesterol","mg/dL",   null,200,  [228, 220, 212, 205, 196, 188]],   // high → normal
+  ["LDL Cholesterol",  "mg/dL",   null,100,  [150, 145, 138, 130, 122, 110]],   // high, improving
+  ["HDL Cholesterol",  "mg/dL",   40,  null, [38, 39, 41, 43, 45, 47]],         // low → normal
+  ["Triglycerides",    "mg/dL",   null,150,  [190, 180, 170, 160, 150, 140]],   // high → normal
+  // ── Liver ──
+  ["ALT",              "U/L",     0,   55,   [68, 64, 60, 55, 50, 45]],         // high, improving
+  ["AST",              "U/L",     0,   40,   [52, 48, 44, 40, 37, 34]],         // high → normal
+  ["ALP",              "U/L",     40,  129,  [88, 90, 85, 92, 87, 89]],         // normal
+  // ── Kidney ──
+  ["Creatinine",       "mg/dL",   0.7, 1.3,  [1.0, 1.0, 1.1, 1.0, 1.1, 1.0]],   // normal
+  ["Urea",             "mg/dL",   17,  43,   [34, 36, 32, 35, 33, 34]],         // normal
+  ["Uric Acid",        "mg/dL",   3.5, 7.2,  [7.6, 7.4, 7.2, 7.0, 6.8, 6.6]],   // high → normal
+  // ── Thyroid / Hormones ──
+  ["TSH",              "µIU/mL",  0.4, 4.5,  [3.0, 3.1, 3.2, 3.0, 2.9, 3.1]],   // normal
+  ["Free T3",          "pg/mL",   2.0, 4.4,  [3.1, 3.0, 3.2, 3.1, 3.0, 3.2]],   // normal
+  ["Free T4",          "ng/dL",   0.8, 1.8,  [1.2, 1.1, 1.3, 1.2, 1.1, 1.2]],   // normal
+  // ── Blood / Immune / Coagulation ──
+  ["Hemoglobin",       "g/dL",    13,  17,   [14.2, 14.4, 14.6, 14.8, 15.0, 15.1]], // normal
+  ["WBC Count",        "10^3/µL", 4.0, 11.0, [6.8, 7.0, 6.5, 7.2, 6.9, 7.1]],   // normal
+  ["Neutrophils",      "%",       40,  70,   [58, 60, 57, 61, 59, 60]],         // normal
+  ["Lymphocytes",      "%",       20,  40,   [32, 31, 33, 30, 32, 31]],         // normal
+  ["Platelet Count",   "10^3/µL", 150, 410,  [250, 260, 245, 255, 248, 252]],   // normal
+  ["PT",               "sec",     11,  13.5, [12.0, 12.2, 11.8, 12.1, 12.0, 12.2]], // normal
+  ["INR",              "",        0.8, 1.2,  [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]],   // normal
+  // ── Bone / Electrolytes ──
+  ["Calcium",          "mg/dL",   8.6, 10.2, [9.3, 9.4, 9.5, 9.4, 9.5, 9.4]],   // normal
+  ["Phosphorus",       "mg/dL",   2.5, 4.5,  [3.4, 3.5, 3.3, 3.6, 3.4, 3.5]],   // normal
+  ["Sodium",           "mmol/L",  135, 145,  [140, 141, 139, 140, 142, 140]],   // normal
+  ["Potassium",        "mmol/L",  3.5, 5.1,  [4.2, 4.3, 4.1, 4.4, 4.2, 4.3]],   // normal
+  ["Chloride",         "mmol/L",  98,  107,  [102, 103, 101, 104, 102, 103]],   // normal
+  ["Magnesium",        "mg/dL",   1.7, 2.2,  [2.0, 2.1, 1.9, 2.0, 2.1, 2.0]],   // normal
+  // ── Inflammation ──
+  ["CRP",              "mg/L",    null,5,     [8, 7, 6, 5, 4, 3]],              // high → normal
+  ["ESR",              "mm/hr",   0,   20,    [26, 24, 20, 18, 15, 12]],         // high → normal
+  ["Ferritin",         "ng/mL",   30,  400,   [120, 130, 140, 135, 145, 150]],  // normal
+  // ── Vitamins & Nutrition ──
+  ["Vitamin D",        "ng/mL",   30,  100,  [18, 20, 23, 26, 30, 34]],         // low → normal
+  ["Vitamin B12",      "pg/mL",   200, 900,  [210, 240, 280, 320, 360, 400]],   // low → normal
+  // ── Urinary (qualitative + a couple numeric) ──
+  ["Urine Protein",    "",        null,null, ["Negative", "Trace", "Negative", "Negative", "Negative", "Negative"]],
+  ["Urine Glucose",    "",        null,null, ["Trace", "Negative", "Negative", "Negative", "Negative", "Negative"]],
+  ["Urine Blood",      "",        null,null, ["Negative", "Negative", "Negative", "Negative", "Negative", "Negative"]],
+  ["Urine pH",         "",        4.5, 8.0,  [6.0, 5.5, 6.0, 6.5, 6.0, 5.5]],   // normal
+  ["Urine Specific Gravity", "",  1.005,1.030,[1.015, 1.018, 1.012, 1.020, 1.015, 1.016]], // normal
 ];
 
 function daysAgo(n: number): Date { const d = new Date(); d.setDate(d.getDate() - n); return d; }
@@ -75,13 +114,20 @@ async function seedReports(userId: string) {
     });
     const rows = LABS.filter((l) => cid.has(l[0])).map(([name, unit, low, high, values]) => {
       const value = values[i];
-      const { interpretation, oor } = interp(value, low, high);
       const c = cid.get(name)!;
-      const refRaw = low !== null && high !== null ? `${low} - ${high}` : high !== null ? `< ${high}` : `> ${low}`;
+      const qualitative = typeof value === "string";
+      const numeric = qualitative ? null : (value as number);
+      const { interpretation, oor } = qualitative
+        ? { interpretation: "NORMAL" as Interpretation, oor: false }
+        : interp(numeric!, low, high);
+      const refRaw = low !== null && high !== null ? `${low} - ${high}`
+        : high !== null ? `< ${high}`
+        : low !== null ? `> ${low}`
+        : qualitative ? "Negative" : "—";
       return {
         userId, rawTestName: name, normalizedName: name, canonicalTestId: c.id, loincNum: c.loincNum,
-        observedValueRaw: String(value), observedValueNumeric: value, observedValueUnit: unit,
-        referenceIntervalRaw: refRaw, referenceLow: low, referenceHigh: high, referenceUnit: unit,
+        observedValueRaw: String(value), observedValueNumeric: numeric, observedValueUnit: unit || null,
+        referenceIntervalRaw: refRaw, referenceLow: low, referenceHigh: high, referenceUnit: unit || null,
         interpretation, confidence: 0.92, isOutOfRange: oor, plausibilityFlag: null,
       };
     });
