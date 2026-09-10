@@ -12,6 +12,8 @@ export type ChatOptions = {
   format?: "json";
   temperature?: number;
   num_ctx?: number;
+  /** Cap on generated tokens. Bounds worst-case latency on CPU inference. */
+  num_predict?: number;
   [key: string]: unknown;
 };
 

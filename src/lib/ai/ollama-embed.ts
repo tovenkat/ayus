@@ -6,6 +6,7 @@
  */
 
 import type { EmbedProvider } from "./types";
+import { ollamaKeepAlive } from "./config";
 
 const EMBED_TIMEOUT = 30_000;
 const MAX_RETRIES = 2;
@@ -30,7 +31,7 @@ export class OllamaEmbedProvider implements EmbedProvider {
         const res = await fetch(`${this.baseUrl}/api/embed`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ model: this.model, input }),
+          body: JSON.stringify({ model: this.model, input, keep_alive: ollamaKeepAlive() }),
           signal: controller.signal,
         });
 

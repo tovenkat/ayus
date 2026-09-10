@@ -16,10 +16,16 @@ export type RagContext = {
  * Retrieve relevant context for a user query.
  * Combines keyword matching with semantic search.
  */
+// CPU prompt-eval cost is ~linear in context tokens, so keep the retrieved
+// context lean: fewer chunks, each capped. Tune via RAG_CHUNK_LIMIT /
+// RAG_CHUNK_CHARS if you move to a GPU/cloud chat model.
+const CHUNK_LIMIT = Math.max(1, Number(process.env.RAG_CHUNK_LIMIT) || 4);
+const CHUNK_CHARS = Math.max(200, Number(process.env.RAG_CHUNK_CHARS) || 800);
+
 export async function retrieveContext(
   userId: string,
   query: string,
-  limit: number = 8
+  limit: number = CHUNK_LIMIT
 ): Promise<RagContext> {
   const chunks: RagContext["chunks"] = [];
 
@@ -42,7 +48,7 @@ export async function retrieveContext(
           documentId: result.metadata.documentId as string,
           slug: result.metadata.slug as string,
           title: result.metadata.title as string,
-          content: result.text,
+          content: result.text.slice(0, CHUNK_CHARS),
         });
       }
     }
@@ -73,7 +79,7 @@ export async function retrieveContext(
           documentId: doc.id,
           slug: doc.slug,
           title: doc.title,
-          content: stripWikilinks(doc.rawContent).slice(0, 1500),
+          content: stripWikilinks(doc.rawContent).slice(0, CHUNK_CHARS),
         });
       }
     }

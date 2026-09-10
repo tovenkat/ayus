@@ -23,6 +23,13 @@ services:
   ollama:
     image: ollama/ollama:latest
     restart: unless-stopped
+    environment:
+      # Keep models resident between requests (CPU model-load is expensive).
+      # -1 = forever; keep the chat + embed models both loaded (avoid swap
+      # thrash between an embed call and the chat call in one RAG request).
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:--1}
+      OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-2}
+      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-1}
     volumes:
       - ollama:/root/.ollama
     # No published ports — only the app talks to it over the internal network.

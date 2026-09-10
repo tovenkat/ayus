@@ -149,7 +149,11 @@ export async function POST(req: Request) {
 
     // ── Stream response ─────────────────────────────────────────────────
     const { provider } = await getProviderForUser(userId, "chat");
-    const stream = provider.chatStream(messages, { temperature: 0.3 });
+    // Bound CPU-inference latency: cap the context window and the answer length.
+    // Env-overridable so a GPU/cloud deployment can lift them.
+    const num_ctx = Number(process.env.CHAT_NUM_CTX) || 4096;
+    const num_predict = Number(process.env.CHAT_NUM_PREDICT) || 512;
+    const stream = provider.chatStream(messages, { temperature: 0.3, num_ctx, num_predict });
 
     const encoder = new TextEncoder();
     let fullResponse = "";

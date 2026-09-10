@@ -6,6 +6,7 @@
  */
 
 import type { ChatProvider, ChatMessage, ChatOptions, ChatResponse } from "./types";
+import { ollamaKeepAlive } from "./config";
 
 const CHAT_TIMEOUT = 600_000; // 10 minutes for large extraction jobs
 const MAX_RETRIES = 2;
@@ -32,12 +33,13 @@ export class OllamaChatProvider implements ChatProvider {
           model: this.model,
           messages,
           stream: false,
-          keep_alive: "10m",
+          keep_alive: ollamaKeepAlive(),
         };
         if (options?.format) body.format = options.format;
         const ollamaOpts: Record<string, unknown> = {};
         if (options?.temperature !== undefined) ollamaOpts.temperature = options.temperature;
         if (options?.num_ctx !== undefined) ollamaOpts.num_ctx = options.num_ctx;
+        if (options?.num_predict !== undefined) ollamaOpts.num_predict = options.num_predict;
         if (Object.keys(ollamaOpts).length > 0) body.options = ollamaOpts;
 
         const res = await fetch(`${this.baseUrl}/api/chat`, {
@@ -77,7 +79,7 @@ export class OllamaChatProvider implements ChatProvider {
           model: this.model,
           messages: [{ role: "user", content: "hi" }],
           stream: false,
-          keep_alive: "10m",
+          keep_alive: ollamaKeepAlive(),
           options: { num_predict: 1 },
         }),
       });
@@ -97,12 +99,13 @@ export class OllamaChatProvider implements ChatProvider {
       model: this.model,
       messages,
       stream: true,
-      keep_alive: "10m",
+      keep_alive: ollamaKeepAlive(),
     };
     if (options?.format) body.format = options.format;
     const ollamaOpts: Record<string, unknown> = {};
     if (options?.temperature !== undefined) ollamaOpts.temperature = options.temperature;
     if (options?.num_ctx !== undefined) ollamaOpts.num_ctx = options.num_ctx;
+    if (options?.num_predict !== undefined) ollamaOpts.num_predict = options.num_predict;
     if (Object.keys(ollamaOpts).length > 0) body.options = ollamaOpts;
 
     // Use timeout only for the initial connection (prompt processing can be slow

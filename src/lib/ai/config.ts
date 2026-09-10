@@ -1,10 +1,34 @@
 /**
  * AI Configuration — parses env vars for provider selection.
+ *
+ * NB: no `node:*` imports at module scope. This module is reachable from
+ * `instrumentation.ts`, which Next.js also compiles for the Edge runtime where
+ * Node builtins are rejected. The tiny path helpers below avoid `node:path`.
  */
 
-import path from "node:path";
+// Minimal path helpers (only used for local-GGUF model paths). Avoids importing
+// node:path so this module stays Edge-compilable.
+function joinPath(...parts: string[]): string {
+  return parts.join("/").replace(/\/{2,}/g, "/");
+}
+function isAbsolutePath(p: string): boolean {
+  return p.startsWith("/");
+}
 
 export type CloudProvider = "GEMINI" | "OPENAI" | "CLAUDE" | "VLLM" | "LLAMACPP";
+
+/**
+ * How long Ollama keeps a model resident after a request. On CPU the model
+ * load is expensive (seconds), so we keep it warm between messages. Accepts a
+ * duration string ("30m") or an integer number of seconds; "-1" = forever.
+ * Configured via OLLAMA_KEEP_ALIVE; defaults to 30m.
+ */
+export function ollamaKeepAlive(): string | number {
+  const v = process.env.OLLAMA_KEEP_ALIVE;
+  if (!v) return "30m";
+  const n = Number(v);
+  return Number.isInteger(n) ? n : v; // -1 / 600 → number; "30m" → string
+}
 
 const CLOUD_DEFAULT_MODELS: Record<CloudProvider, string> = {
   GEMINI: "gemini-2.5-flash",
@@ -119,9 +143,12 @@ export function loadAIConfig(): AIConfig {
   const chatModelFile = process.env.CHAT_MODEL_FILE ?? "google_gemma-3-4b-it-Q4_K_M.gguf";
   const embedModelDirName = process.env.EMBED_MODEL_DIR ?? "embedding-gemma";
 
-  const modelsRoot = path.join(process.cwd(), "models");
+  const cwd = process.cwd();
+  const modelsRoot = joinPath(cwd, "models");
   const resolvePath = (name: string) =>
-    name.includes("/") || path.isAbsolute(name) ? path.resolve(process.cwd(), name) : path.join(modelsRoot, name);
+    isAbsolutePath(name) ? name
+    : name.includes("/") ? joinPath(cwd, name)
+    : joinPath(modelsRoot, name);
 
   const chatModelPath = resolvePath(chatModelFile);
   const embedModelDir = resolvePath(embedModelDirName);
@@ -185,7 +212,7 @@ export function loadAIConfig(): AIConfig {
     vectorDbEnv === "lancedb" ? "lancedb"
     : vectorDbEnv === "pgvector" ? "pgvector"
     : "none";
-  const lancedbPath = process.env.LANCEDB_PATH ?? path.join(process.cwd(), ".lancedb");
+  const lancedbPath = process.env.LANCEDB_PATH ?? joinPath(process.cwd(), ".lancedb");
 
   cached = {
     internetLlm, internetLlmApiKey, internetLlmModel,
