@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { Logo } from "@/components/ui/logo";
 import { Button } from "@/components/ui/button";
@@ -36,14 +35,15 @@ export const metadata = {
 
 export default async function LandingPage() {
   const session = await auth();
-  if (session?.user) {
-    redirect("/dashboard");
-  }
+  // Logged-in users can browse the marketing page (the nav + CTAs switch to
+  // "Go to Dashboard" below). Post-login navigation still lands on /dashboard
+  // (the auth flow pushes there), so this only affects explicit visits to "/".
+  const authed = !!session?.user;
 
   return (
     <div className="flex flex-col">
-      <SiteNav />
-      <Hero />
+      <SiteNav authed={authed} />
+      <Hero authed={authed} />
       <TrustStrip />
       <Problem />
       <HowItWorks />
@@ -53,7 +53,7 @@ export default async function LandingPage() {
       <Testimonials />
       <PricingPreview />
       <FAQ />
-      <FinalCTA />
+      <FinalCTA authed={authed} />
       <SiteFooter />
     </div>
   );
@@ -61,7 +61,7 @@ export default async function LandingPage() {
 
 // ─── Nav ────────────────────────────────────────────────────────────────────
 
-function SiteNav() {
+function SiteNav({ authed }: { authed: boolean }) {
   return (
     <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur supports-backdrop-filter:bg-background/60">
       <div className="mx-auto max-w-6xl flex items-center justify-between px-4 py-3">
@@ -73,12 +73,22 @@ function SiteNav() {
           <a href="#clinics" className="hover:text-foreground">For clinics</a>
         </nav>
         <div className="flex items-center gap-2">
-          <Link href="/login">
-            <Button variant="ghost" size="sm">Sign in</Button>
-          </Link>
-          <Link href="/register">
-            <Button size="sm">Start free</Button>
-          </Link>
+          {authed ? (
+            <Link href="/dashboard">
+              <Button size="sm" className="gap-1.5">
+                Go to Dashboard <ArrowRight className="size-3.5" />
+              </Button>
+            </Link>
+          ) : (
+            <>
+              <Link href="/login">
+                <Button variant="ghost" size="sm">Sign in</Button>
+              </Link>
+              <Link href="/register">
+                <Button size="sm">Start free</Button>
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </header>
@@ -87,7 +97,7 @@ function SiteNav() {
 
 // ─── Hero ───────────────────────────────────────────────────────────────────
 
-function Hero() {
+function Hero({ authed }: { authed: boolean }) {
   return (
     <section className="relative overflow-hidden">
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,var(--tw-gradient-stops))] from-emerald-500/10 via-background to-background" />
@@ -113,9 +123,9 @@ function Hero() {
         </p>
 
         <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
-          <Link href="/register">
+          <Link href={authed ? "/dashboard" : "/register"}>
             <Button size="lg" className="gap-2">
-              Start free — no card required
+              {authed ? "Go to your dashboard" : "Start free — no card required"}
               <ArrowRight className="size-4" />
             </Button>
           </Link>
@@ -695,7 +705,7 @@ function FAQ() {
 
 // ─── Final CTA ──────────────────────────────────────────────────────────────
 
-function FinalCTA() {
+function FinalCTA({ authed }: { authed: boolean }) {
   return (
     <section className="relative overflow-hidden">
       <div className="absolute inset-0 -z-10 bg-linear-to-br from-blue-600 to-indigo-600" />
@@ -708,9 +718,9 @@ function FinalCTA() {
           take your markdown folder and leave — no hard feelings.
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
-          <Link href="/register">
+          <Link href={authed ? "/dashboard" : "/register"}>
             <Button size="lg" variant="secondary" className="gap-2">
-              Start free
+              {authed ? "Go to your dashboard" : "Start free"}
               <ArrowRight className="size-4" />
             </Button>
           </Link>

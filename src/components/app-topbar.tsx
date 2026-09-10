@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { signOut, useSession } from "next-auth/react";
 import Link from "next/link";
-import { LogOut, Settings } from "lucide-react";
+import { LogOut, Settings, Home } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -53,6 +53,12 @@ export function AppTopbar() {
               <Link href="/settings" className="flex items-center w-full">
                 <Settings className="mr-2 size-4" />
                 Settings
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem>
+              <Link href="/" className="flex items-center w-full">
+                <Home className="mr-2 size-4" />
+                Home page
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
