@@ -18,6 +18,7 @@ import { prisma } from "../src/lib/prisma";
 import type { Interpretation } from "@prisma/client";
 import { synthesizeLabReport, updateMasterIndex } from "../src/lib/wiki-gen/synthesize";
 import { reconcileVault } from "../src/lib/vault-reconcile";
+import { writeWikiPage } from "../src/lib/vault";
 
 const PHONE = "+910000000001";
 
@@ -186,6 +187,123 @@ async function seedReports(userId: string) {
   return { reports, results, wikiPages };
 }
 
+// Personal, hand-written health notes (symptom diary, questions for the doctor,
+// lifestyle log, family history). Written as real wiki pages under journal/ with
+// tags + [[links]] to biomarker pages, so they show on /wiki (Health Notes) AND
+// connect into the Wiki Graph. reconcileVault (run after) indexes + links them.
+const HEALTH_NOTES: { rel: string; md: string }[] = [
+  {
+    rel: "journal/symptom-diary.md",
+    md: `---
+title: Symptom Diary
+tags: [journal, symptoms]
+type: journal
+---
+
+# Symptom Diary
+
+A running log of how I've been feeling.
+
+- **Afternoon fatigue** — much better since I started [[Vitamin D]] weekly. Used to crash around 3pm.
+- **Occasional headaches** — usually when I skip breakfast. Keeping an eye on [[Fasting Glucose]].
+- **Energy** — steadier on days I walk 30 min after dinner.
+
+Overall trending the right way. [[HbA1c]] is down from 6.4 to 5.8 over the last year.
+`,
+  },
+  {
+    rel: "journal/questions-for-my-doctor.md",
+    md: `---
+title: Questions for My Doctor
+tags: [journal, appointments]
+type: journal
+---
+
+# Questions for My Doctor
+
+To ask at my next visit:
+
+1. My [[LDL Cholesterol]] is down to 110 — can we review whether the statin dose is still right?
+2. [[Uric Acid]] was borderline high earlier — anything I should change in my diet?
+3. [[Triglycerides]] — are they in a safe range now?
+4. How often should I recheck [[HbA1c]]?
+`,
+  },
+  {
+    rel: "journal/diet-and-exercise-log.md",
+    md: `---
+title: Diet & Exercise Log
+tags: [journal, lifestyle]
+type: journal
+---
+
+# Diet & Exercise Log
+
+What's been working:
+
+- **Walking** 30–40 min, 5 days a week. Seems to help [[Fasting Glucose]].
+- **Cut sugary chai** to once a day — [[Triglycerides]] improved after.
+- More fibre (oats, dal, veg). [[HDL Cholesterol]] slowly creeping up.
+- Weekend cheat meals kept small.
+`,
+  },
+  {
+    rel: "journal/family-history.md",
+    md: `---
+title: Family History
+tags: [journal, history]
+type: journal
+---
+
+# Family History
+
+For my records and to share with any new doctor:
+
+- **Father** — Type 2 diabetes (diagnosed ~55). Relevant to my [[HbA1c]] watch.
+- **Mother** — high cholesterol; on statins. Related to my [[LDL Cholesterol]].
+- **Paternal grandfather** — heart disease.
+
+Given this, keeping a close eye on metabolic and lipid markers.
+`,
+  },
+  {
+    rel: "journal/progress-notes.md",
+    md: `---
+title: Progress Notes
+tags: [journal, progress]
+type: journal
+---
+
+# Progress Notes
+
+One-year check-in — things are moving in the right direction:
+
+- [[HbA1c]]: 6.4% → **5.8%**
+- [[LDL Cholesterol]]: 150 → **110**
+- [[ALT]] (liver): 68 → **45**, now in range
+- [[Vitamin D]]: 18 → **34**, deficiency resolved
+
+Plan: keep the diet + walking, recheck labs in ~6 weeks.
+`,
+  },
+];
+
+async function seedHealthNotes(userId: string) {
+  for (const note of HEALTH_NOTES) {
+    await writeWikiPage(userId, note.rel, note.md);
+  }
+  // Index the new files + resolve their [[links]] to biomarker pages. Two
+  // passes: a single reconcile can create a link before this pass has indexed
+  // its target; the second pass resolves those cross-references deterministically.
+  try {
+    await reconcileVault(userId);
+    await reconcileVault(userId);
+  } catch (e) {
+    console.warn("[personal-demo] notes reconcile failed:", e instanceof Error ? e.message : e);
+  }
+  return HEALTH_NOTES.length;
+}
+
 async function seedMedications(userId: string) {
   await prisma.medication.deleteMany({ where: { userId } });
   const meds: Array<Parameters<typeof prisma.medication.create>[0]["data"]> = [
@@ -297,6 +415,7 @@ async function main() {
   if (!user) throw new Error(`User ${PHONE} not found — run \`npm run dummy:seed\` first.`);
 
   const { reports, results, wikiPages } = await seedReports(user.id);
+  const notes = await seedHealthNotes(user.id);
   const meds = await seedMedications(user.id);
   const meals = await seedMeals(user.id);
   const visits = await seedVisits(user.id);
@@ -304,8 +423,9 @@ async function main() {
 
   console.log(
     `[personal-demo] ${user.name ?? PHONE}: ${reports} reports, ${results} results, ` +
-    `${wikiPages} wiki pages, ${meds} medications, ${meals} meals, ${visits} doctor visits (1 upcoming follow-up); ` +
-    `AI: ${ai}. Log in as ${PHONE} → /dashboard (Wiki Graph at /wiki/graph).`,
+    `${wikiPages} wiki pages + ${notes} personal health notes, ${meds} medications, ${meals} meals, ` +
+    `${visits} doctor visits (1 upcoming follow-up); AI: ${ai}. ` +
+    `Log in as ${PHONE} → /wiki (Health Notes) · /wiki/graph (Graph).`,
   );
 }
 
