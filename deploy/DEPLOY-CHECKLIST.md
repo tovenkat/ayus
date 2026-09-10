@@ -16,6 +16,11 @@ git push origin main
 The webhook / GitHub Action rebuilds the droplet. Watch it:
 `journalctl -u ayus-webhook -f`  (or the GitHub **Actions** tab).
 
+Confirm the droplet actually moved to the latest commit:
+```bash
+cd /opt/ayus && git log --oneline -1   # should match your local HEAD
+```
+
 ## 2. `.env` keys on the droplet
 The live `.env` predates several features. Ensure these are set (idempotent — safe to re-run):
 
@@ -52,12 +57,28 @@ grep -E '^(ENCRYPTION_KEY|AUTH_TRUST_HOST|DEMO_OTP_AUTOFILL|CHAT_MODEL|EXTRACT_M
 ## 3. Apply + pull models
 ```bash
 bash deploy/deploy.sh          # rebuilds, recreates containers, pulls OLLAMA_MODELS,
+                               # runs `prisma migrate deploy` (applies new migrations),
                                # and (ENABLE_GLINER=true) builds + starts the gliner sidecar
 
 # If you only edited .env (no redeploy needed), just recreate the affected containers:
 $DC up -d app ollama
 $DC exec -T ollama ollama pull qwen2.5:7b-instruct   # if not already pulled
 ```
+
+**DB migration:** `deploy.sh` runs `prisma migrate deploy`, which applies the
+`cloudExtractionOptIn` migration. The settings page selects that column, so the
+migration must land or `/settings` 500s — `deploy.sh` runs it *before* starting
+the app, so a normal deploy handles it. Verify:
+```bash
+$DC exec -T -e PGPASSWORD="$(grep '^POSTGRES_PASSWORD=' .env|cut -d= -f2-)" postgres \
+  psql -U "$(grep '^POSTGRES_USER=' .env|cut -d= -f2-)" -d "$(grep '^POSTGRES_DB=' .env|cut -d= -f2-)" \
+  -c '\d "User"' | grep cloudExtractionOptIn || echo "⚠ migration not applied — run: $DC run --rm migrate npx prisma migrate deploy"
+```
+
+**Gotcha — changing a model name:** editing `CHAT_MODEL`/`EXTRACT_MODEL`/
+`OLLAMA_MODELS` in `.env` does **not** fetch the model. Either run `deploy.sh`
+(it pulls `OLLAMA_MODELS`) or `ollama pull <model>` manually — otherwise uploads
+hang right after "mean quality …" because Ollama is asked for a model it lacks.
 
 ## 4. Re-seed demo data (DB already exists → seeding doesn't auto-run)
 ```bash
@@ -79,9 +100,13 @@ docker compose -f docker-compose.yml -f docker-compose.nginx.yml --profile gline
 ```
 
 ## 6. Smoke test in the browser
-- **https://ayus.in/login** → `+910000000001` (dropdown 🇮🇳 +91) → OTP prefilled `123456` → dashboard.
+- **https://ayus.in/login** → `+910000000001` (country dropdown 🇮🇳 +91) → OTP prefilled `123456` → dashboard.
 - Dashboard shows status pie + all-organ anatomy, Today's Medications/Meals, Recent Doctor Visits.
-- **Settings → AI**: cloud providers selectable (PERSONAL tier). Paste a provider key to use Internet LLM for chat (BYOK).
+- Header **logo** clickable; mobile shows the **Sign in** button; favicon is the Ayus mark.
+- **Settings → AI**: cloud providers (Gemini/OpenAI/Claude) selectable on **any tier incl. FREE** (BYOK).
+  Paste a provider key — it's **validated on save** (a bad key is rejected immediately).
+  By default **extraction stays local**; the "use my key for extraction too" toggle opts in.
+- Logged-in user: **logo/user-menu → Home page** shows the marketing page with a "Go to Dashboard" CTA.
 - Upload a **lab PDF** (extraction) and a **prescription PDF** (GLiNER path, if enabled).
 
 ## ⚠️ Before a real (non-demo) launch
