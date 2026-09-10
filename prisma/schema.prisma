@@ -153,7 +153,11 @@ model User {
   byokKeyEncrypted String? // user-level BYOK (Personal tier+)
   vllmBaseUrl      String? // per-user vLLM endpoint override (falls back to VLLM_BASE_URL env)
   llamaCppBaseUrl  String? // per-user llama.cpp endpoint override (falls back to LLAMACPP_BASE_URL env)
-  privacyMode      Boolean     @default(false) // force local Ollama
+  privacyMode      Boolean     @default(false) // force local Ollama (all AI)
+  // Extraction/OCR stay LOCAL by default even when a cloud provider/BYOK is set
+  // (raw reports are the most sensitive PHI). Opt in to also use the cloud
+  // provider for document extraction. Chat/diet/prep always honor the choice.
+  cloudExtractionOptIn Boolean  @default(false)
 
   accounts       Account[]
   sessions       Session[]

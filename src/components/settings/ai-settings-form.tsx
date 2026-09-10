@@ -18,12 +18,15 @@ type Props = {
     aiProvider: AiProvider | null;
     aiModel: string | null;
     privacyMode: boolean;
+    cloudExtractionOptIn: boolean;
     hasByokKey: boolean;
     vllmBaseUrl: string | null;
     llamaCppBaseUrl: string | null;
     tier: SubscriptionTier;
   };
 };
+
+const THIRD_PARTY_CLOUD: AiProvider[] = ["GEMINI", "OPENAI", "CLAUDE", "AZURE_OPENAI", "BEDROCK", "VERTEX"];
 
 type ProviderMeta = {
   id: AiProvider;
@@ -90,6 +93,7 @@ export function AiSettingsForm({ initial }: Props) {
   const [model, setModel] = useState<string | "INHERIT">(initial.aiModel ?? "INHERIT");
   const [apiKey, setApiKey] = useState("");
   const [privacyMode, setPrivacyMode] = useState(initial.privacyMode);
+  const [cloudExtraction, setCloudExtraction] = useState(initial.cloudExtractionOptIn);
   const [hasByokKey, setHasByokKey] = useState(initial.hasByokKey);
   const [vllmBaseUrl, setVllmBaseUrl] = useState(initial.vllmBaseUrl ?? "");
   const [vllmModelInput, setVllmModelInput] = useState(initial.aiProvider === "VLLM" ? (initial.aiModel ?? "") : "");
@@ -140,6 +144,7 @@ export function AiSettingsForm({ initial }: Props) {
           vllmBaseUrl: provider === "VLLM" ? (vllmBaseUrl.trim() || "") : undefined,
           llamaCppBaseUrl: provider === "LLAMACPP" ? (llamaCppBaseUrl.trim() || "") : undefined,
           privacyMode,
+          cloudExtractionOptIn: cloudExtraction,
         }),
       });
       if (!res.ok) {
@@ -387,6 +392,26 @@ export function AiSettingsForm({ initial }: Props) {
               </span>
             </div>
           )}
+        </Card>
+      )}
+
+      {/* Extraction scope — only relevant for third-party cloud providers. */}
+      {!privacyMode && provider !== "INHERIT" && THIRD_PARTY_CLOUD.includes(provider as AiProvider) && (
+        <Card className="p-4 space-y-3 bg-muted/30">
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-1 pr-2">
+              <div className="flex items-center gap-2">
+                <Lock className="size-4 text-primary" />
+                <p className="text-sm font-medium">Use {selectedMeta?.name ?? "this provider"} for document extraction too</p>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                By default your lab reports are parsed <strong>locally</strong> — raw documents never leave this server.
+                Turn this on to also send full report text/images to {selectedMeta?.name ?? "your provider"} for
+                higher-accuracy extraction. Uses more of your quota. Chat, diet, and visit-prep always use your provider.
+              </p>
+            </div>
+            <Switch id="cloud-extraction" checked={cloudExtraction} onCheckedChange={setCloudExtraction} />
+          </div>
         </Card>
       )}
 

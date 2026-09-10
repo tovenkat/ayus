@@ -10,7 +10,7 @@ export type ResolvedAiSettings = {
   model: string;
   apiKey: string | null; // null → use system env key or local ollama
   baseURL: string | null; // only set for VLLM (per-user override or VLLM_BASE_URL env)
-  source: "privacyMode" | "user" | "org" | "env" | "default";
+  source: "privacyMode" | "user" | "org" | "env" | "default" | "extractionLocal";
   userId: string;
   organizationId: string | null;
 };
@@ -20,6 +20,7 @@ async function resolveForRole(userId: string, role: "extract" | "ocr" | "chat"):
     where: { id: userId },
     select: {
       privacyMode: true,
+      cloudExtractionOptIn: true,
       aiProvider: true,
       aiModel: true,
       byokKeyEncrypted: true,
@@ -84,34 +85,44 @@ async function resolveForRole(userId: string, role: "extract" | "ocr" | "chat"):
     return DEFAULT_MODEL_IDS[p];
   };
 
-  // 2. User preference
+  const localSettings = (source: ResolvedAiSettings["source"]): ResolvedAiSettings => ({
+    provider: "OLLAMA_LOCAL",
+    model: ollamaRoleModel(),
+    apiKey: null,
+    baseURL: null,
+    source,
+    userId,
+    organizationId: org?.id ?? null,
+  });
+
+  // Resolve the candidate provider (user > org > env > local default).
+  let candidate: ResolvedAiSettings;
   if (user.aiProvider) {
-    const baseURL = baseURLFor(user.aiProvider, user.vllmBaseUrl, user.llamaCppBaseUrl);
-    const model = modelFor(user.aiProvider, user.aiModel);
-    const apiKey = user.byokKeyEncrypted ? decryptSecret(user.byokKeyEncrypted) : systemKeyFor(user.aiProvider);
-    return {
+    // 2. User preference
+    candidate = {
       provider: user.aiProvider,
-      model,
-      apiKey,
-      baseURL,
+      model: modelFor(user.aiProvider, user.aiModel),
+      apiKey: user.byokKeyEncrypted ? decryptSecret(user.byokKeyEncrypted) : systemKeyFor(user.aiProvider),
+      baseURL: baseURLFor(user.aiProvider, user.vllmBaseUrl, user.llamaCppBaseUrl),
       source: "user",
       userId,
       organizationId: org?.id ?? null,
     };
-  }
-
-  // 3. Org default
-  if (org?.defaultAiProvider) {
-    const baseURL = baseURLFor(org.defaultAiProvider);
-    const model = modelFor(org.defaultAiProvider, org.defaultAiModel);
-    const apiKey = org.byokKeyEncrypted ? decryptSecret(org.byokKeyEncrypted) : systemKeyFor(org.defaultAiProvider);
-    return { provider: org.defaultAiProvider, model, apiKey, baseURL, source: "org", userId, organizationId: org.id };
-  }
-
-  // 4. Env fallback
-  if (config.internetLlm) {
+  } else if (org?.defaultAiProvider) {
+    // 3. Org default
+    candidate = {
+      provider: org.defaultAiProvider,
+      model: modelFor(org.defaultAiProvider, org.defaultAiModel),
+      apiKey: org.byokKeyEncrypted ? decryptSecret(org.byokKeyEncrypted) : systemKeyFor(org.defaultAiProvider),
+      baseURL: baseURLFor(org.defaultAiProvider),
+      source: "org",
+      userId,
+      organizationId: org.id,
+    };
+  } else if (config.internetLlm) {
+    // 4. Env fallback
     const provider = config.internetLlm as AiProvider;
-    return {
+    candidate = {
       provider,
       model: config.internetLlmModel ?? modelFor(provider),
       apiKey: config.internetLlmApiKey,
@@ -120,18 +131,26 @@ async function resolveForRole(userId: string, role: "extract" | "ocr" | "chat"):
       userId,
       organizationId: org?.id ?? null,
     };
+  } else {
+    // 5. Default → local Ollama
+    candidate = localSettings("default");
   }
 
-  // 5. Default → local Ollama
-  return {
-    provider: "OLLAMA_LOCAL",
-    model: role === "ocr" ? (config.ocrModel ?? config.extractModel) : role === "extract" ? config.extractModel : config.chatModel,
-    apiKey: null,
-    baseURL: null,
-    source: "default",
-    userId,
-    organizationId: org?.id ?? null,
-  };
+  // PHI guard: document extraction/OCR processes the RAW report (maximal PHI),
+  // so it stays LOCAL even when a third-party cloud provider is configured —
+  // unless the user explicitly opted in (cloudExtractionOptIn). Self-hosted
+  // providers (Ollama/vLLM/llama.cpp) are the user's own infra, so they're
+  // exempt. Chat/diet/prep always honor the configured provider.
+  const isExtraction = role === "extract" || role === "ocr";
+  const isThirdPartyCloud =
+    candidate.provider !== "OLLAMA_LOCAL" &&
+    candidate.provider !== "VLLM" &&
+    candidate.provider !== "LLAMACPP";
+  if (isExtraction && isThirdPartyCloud && !user.cloudExtractionOptIn) {
+    return localSettings("extractionLocal");
+  }
+
+  return candidate;
 }
 
 function systemKeyFor(provider: AiProvider): string | null {

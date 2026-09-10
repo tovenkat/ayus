@@ -116,6 +116,7 @@ CREATE TABLE "User" (
     "vllmBaseUrl" TEXT,
     "llamaCppBaseUrl" TEXT,
     "privacyMode" BOOLEAN NOT NULL DEFAULT false,
+    "cloudExtractionOptIn" BOOLEAN NOT NULL DEFAULT false,
 
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
 );
