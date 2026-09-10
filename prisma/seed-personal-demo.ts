@@ -16,6 +16,8 @@ import "dotenv/config";
 import crypto from "node:crypto";
 import { prisma } from "../src/lib/prisma";
 import type { Interpretation } from "@prisma/client";
+import { synthesizeLabReport, updateMasterIndex } from "../src/lib/wiki-gen/synthesize";
+import { reconcileVault } from "../src/lib/vault-reconcile";
 
 const PHONE = "+910000000001";
 
@@ -101,7 +103,7 @@ async function seedReports(userId: string) {
     where: { userId, organizationId: null, originalName: { startsWith: "self_demo_" } },
   });
 
-  let reports = 0, results = 0;
+  let reports = 0, results = 0, wikiPages = 0;
   for (let i = 0; i < TIMEPOINTS.length; i++) {
     const when = monthsAgo(TIMEPOINTS[i]);
     const sha = crypto.createHash("sha256").update(`${userId}-self-${i}`).digest("hex");
@@ -131,7 +133,7 @@ async function seedReports(userId: string) {
         interpretation, confidence: 0.92, isOutOfRange: oor, plausibilityFlag: null,
       };
     });
-    await prisma.report.create({
+    const rep = await prisma.report.create({
       data: {
         userId, uploadId: upload.id, sampleCollectedOn: when, dateSource: "SAMPLE_COLLECTED",
         sampleType: "Serum", confidence: 0.92, needsReview: false, createdAt: when,
@@ -139,8 +141,49 @@ async function seedReports(userId: string) {
       },
     });
     reports++; results += rows.length;
+
+    // Generate the wiki pages + links (report summary ↔ biomarker entities ↔
+    // master index) so /wiki and the Wiki Graph are populated. Uses the real
+    // generator; its embedding side-effect is best-effort (wrapped internally).
+    try {
+      const gen = await synthesizeLabReport(userId, {
+        id: rep.id,
+        sampleCollectedOn: when,
+        referredBy: "Demo Diagnostics",
+        sampleType: "Serum",
+        testResults: rows.map((r) => ({
+          normalizedName: r.normalizedName,
+          observedValueRaw: r.observedValueRaw,
+          observedValueNumeric: r.observedValueNumeric,
+          observedValueUnit: r.observedValueUnit,
+          referenceIntervalRaw: r.referenceIntervalRaw,
+          referenceLow: r.referenceLow,
+          referenceHigh: r.referenceHigh,
+          interpretation: r.interpretation,
+          isOutOfRange: r.isOutOfRange,
+        })),
+      });
+      wikiPages += gen.pagesCreated + gen.pagesUpdated;
+    } catch (e) {
+      console.warn(`[personal-demo] wiki gen failed for report ${i}:`, e instanceof Error ? e.message : e);
+    }
   }
-  return { reports, results };
+
+  // Master index ties the report summaries + biomarker entities together (the
+  // high-degree hub node in the graph).
+  try { await updateMasterIndex(userId); } catch (e) {
+    console.warn("[personal-demo] master index failed:", e instanceof Error ? e.message : e);
+  }
+
+  // Re-index from disk + resolve dangling [[wikilinks]]. Report summaries link
+  // to biomarker pages that didn't exist yet when the summary was first written,
+  // so their targetId is null until this pass runs → without it the graph has
+  // nodes but no edges.
+  try { await reconcileVault(userId); } catch (e) {
+    console.warn("[personal-demo] vault reconcile failed:", e instanceof Error ? e.message : e);
+  }
+
+  return { reports, results, wikiPages };
 }
 
 async function seedMedications(userId: string) {
@@ -253,7 +296,7 @@ async function main() {
   const user = await prisma.user.findUnique({ where: { phone: PHONE }, select: { id: true, name: true } });
   if (!user) throw new Error(`User ${PHONE} not found — run \`npm run dummy:seed\` first.`);
 
-  const { reports, results } = await seedReports(user.id);
+  const { reports, results, wikiPages } = await seedReports(user.id);
   const meds = await seedMedications(user.id);
   const meals = await seedMeals(user.id);
   const visits = await seedVisits(user.id);
@@ -261,8 +304,8 @@ async function main() {
 
   console.log(
     `[personal-demo] ${user.name ?? PHONE}: ${reports} reports, ${results} results, ` +
-    `${meds} medications, ${meals} meals, ${visits} doctor visits (1 upcoming follow-up); ` +
-    `AI: ${ai}. Log in as ${PHONE} → /dashboard.`,
+    `${wikiPages} wiki pages, ${meds} medications, ${meals} meals, ${visits} doctor visits (1 upcoming follow-up); ` +
+    `AI: ${ai}. Log in as ${PHONE} → /dashboard (Wiki Graph at /wiki/graph).`,
   );
 }
 

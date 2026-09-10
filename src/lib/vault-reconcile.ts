@@ -100,11 +100,22 @@ export async function indexFileFromDisk(userId: string, relPath: string): Promis
   // Rebuild outgoing wikilinks
   await prisma.wikiLink.deleteMany({ where: { sourceId: document.id } });
   for (const target of parsed.wikilinks) {
-    const normalizedSlug = toSlug(target);
-    const targetDoc = await prisma.document.findUnique({
+    const text = target.split("|")[0].trim(); // strip any [[slug|alias]]
+    const normalizedSlug = toSlug(text);
+    let targetDoc = await prisma.document.findUnique({
       where: { userId_slug: { userId, slug: normalizedSlug } },
       select: { id: true },
     });
+    // Obsidian-style fallback: [[Title]] resolves to the page with that title
+    // regardless of the folder its slug lives in (e.g. "Uric Acid" →
+    // entities-uric-acid, "Lab Report — Jul 10" → lab-reports-2025-07-10).
+    // Without this, foldered pages never link up and the graph has no edges.
+    if (!targetDoc) {
+      targetDoc = await prisma.document.findFirst({
+        where: { userId, docType: "MARKDOWN", title: { equals: text, mode: "insensitive" } },
+        select: { id: true },
+      });
+    }
     await prisma.wikiLink.create({
       data: {
         sourceId: document.id,
