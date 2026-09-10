@@ -24,6 +24,7 @@
     "lab:seed-demo": "tsx prisma/seed-lab-demo.ts",
     "clinical:seed-demo": "tsx prisma/seed-clinical-demo.ts",
     "personal:seed-demo": "tsx prisma/seed-personal-demo.ts",
+    "seed:demo": "tsx prisma/seed-biomarkers.ts && tsx prisma/seed-nedl-reconcile.ts && tsx prisma/seed-dummy-accounts.ts && tsx prisma/seed-lab-demo.ts && tsx prisma/seed-clinical-demo.ts && tsx prisma/seed-personal-demo.ts",
     "diseases:seed": "tsx prisma/seed-diseases.ts",
     "dummy:seed": "tsx prisma/seed-dummy-accounts.ts",
     "tests:revalidate": "tsx scripts/revalidate-tests.ts",

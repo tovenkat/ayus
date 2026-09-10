@@ -51,6 +51,11 @@ else
     [ -f "$d/migration.sql" ] || continue
     dc run --rm migrate npx prisma migrate resolve --applied "$name" >/dev/null 2>&1 || true
   done
+  # Seed reference biomarkers + demo accounts/data on first deploy only.
+  if [ "$(val SEED_DEMO)" = "true" ]; then
+    log "seeding reference + demo data (SEED_DEMO=true)"
+    dc run --rm migrate npm run seed:demo || log "! seed:demo had issues (continuing)"
+  fi
 fi
 
 # ── ollama models (idempotent) ──────────────────────────────────────────────────

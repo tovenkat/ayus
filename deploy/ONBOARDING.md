@@ -42,10 +42,27 @@ This builds the images, boots Postgres/Ollama, applies **`deploy/init-db.sql`**
 (first pull is a few GB), and starts the app behind Caddy. First model pull +
 build takes a while; later deploys are fast.
 
-Seed demo/reference data if you want it:
-```bash
-docker compose run --rm migrate sh -c "npm run loinc:seed && npm run biomarkers:seed && npm run nedl:reconcile && npm run diseases:seed && npm run dummy:seed"
-```
+**Demo data is seeded automatically** on the first deploy when `SEED_DEMO=true`
+(default): reference biomarkers + synonyms, and demo accounts with populated
+dashboards. Log in (phone + OTP `123456`):
+
+| Kind | Phone |
+|---|---|
+| Individual | `+910000000001` |
+| Laboratory | `+910000000010` |
+| Doctor | `+910000000020` |
+| Hospital | `+910000000030` |
+
+⚠ These demo accounts use a fixed OTP — **set `SEED_DEMO=false` and remove them
+before a real production launch.**
+
+Re-seed manually anytime: `docker compose run --rm migrate npm run seed:demo`.
+
+**LOINC + ICD-10** reference tables need licensed CSVs that aren't in the repo
+(`ionic/LoincTableCore.csv`, `ionic/icd10.csv`). The app works without them
+(biomarker resolution, organ maps, and care flags don't depend on them). To add
+them, copy the CSVs to `ionic/` on the droplet and run
+`docker compose run --rm migrate sh -c "npm run loinc:seed && npm run diseases:seed"`.
 
 ## 4. Wire the GitHub webhook (auto-deploy on push)
 ```bash
