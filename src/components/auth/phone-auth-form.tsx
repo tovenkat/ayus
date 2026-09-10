@@ -16,11 +16,27 @@ import { requestOtpAction, type OtpRequestState } from "@/lib/actions/auth";
 
 type Props = { mode: "LOGIN" | "REGISTER" };
 
+// Country dial codes for the picker. India first (primary market); a short
+// common-market list keeps the dropdown usable. Add rows as needed.
+const COUNTRIES: { code: string; dial: string; flag: string; label: string }[] = [
+  { code: "IN", dial: "+91", flag: "🇮🇳", label: "India" },
+  { code: "US", dial: "+1", flag: "🇺🇸", label: "United States" },
+  { code: "GB", dial: "+44", flag: "🇬🇧", label: "United Kingdom" },
+  { code: "AE", dial: "+971", flag: "🇦🇪", label: "UAE" },
+  { code: "SG", dial: "+65", flag: "🇸🇬", label: "Singapore" },
+  { code: "AU", dial: "+61", flag: "🇦🇺", label: "Australia" },
+  { code: "CA", dial: "+1", flag: "🇨🇦", label: "Canada" },
+  { code: "SA", dial: "+966", flag: "🇸🇦", label: "Saudi Arabia" },
+  { code: "MY", dial: "+60", flag: "🇲🇾", label: "Malaysia" },
+  { code: "DE", dial: "+49", flag: "🇩🇪", label: "Germany" },
+];
+
 export function PhoneAuthForm({ mode }: Props) {
   const router = useRouter();
 
   const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
+  const [dialCode, setDialCode] = useState("+91"); // default India
+  const [phone, setPhone] = useState(""); // national number only (digits)
   const [code, setCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -35,11 +51,6 @@ export function PhoneAuthForm({ mode }: Props) {
       setCode(reqState.devCode);
     }
   }, [reqState.devCode]);
-
-  // Keep the phone input in sync with whatever the server normalized (e.g. "+91" prefix)
-  useEffect(() => {
-    if (reqState.phone) setPhone(reqState.phone);
-  }, [reqState.phone]);
 
   const otpSent = !!reqState.phone && !reqState.error;
 
@@ -109,18 +120,35 @@ export function PhoneAuthForm({ mode }: Props) {
               )}
               <div className="space-y-1.5">
                 <Label htmlFor="phone">Phone number</Label>
-                <Input
-                  id="phone"
-                  name="phone"
-                  type="tel"
-                  placeholder="+91 98765 43210"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  autoComplete="tel"
-                  required
-                />
+                <div className="flex gap-2">
+                  <select
+                    aria-label="Country code"
+                    value={dialCode}
+                    onChange={(e) => setDialCode(e.target.value)}
+                    className="h-9 shrink-0 rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:border-ring"
+                  >
+                    {COUNTRIES.map((c) => (
+                      <option key={c.code} value={c.dial}>
+                        {c.flag} {c.dial}
+                      </option>
+                    ))}
+                  </select>
+                  <Input
+                    id="phone"
+                    type="tel"
+                    inputMode="numeric"
+                    placeholder="98765 43210"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value.replace(/[^\d]/g, ""))}
+                    autoComplete="tel-national"
+                    required
+                    className="flex-1"
+                  />
+                </div>
+                {/* Submitted value — full E.164 (dial code + national number). */}
+                <input type="hidden" name="phone" value={`${dialCode}${phone}`} />
                 <p className="text-[11px] text-muted-foreground">
-                  We'll send a 6-digit code via WhatsApp. 10-digit numbers default to +91 (India).
+                  We'll send a 6-digit code via WhatsApp. Select your country, then enter your number.
                 </p>
               </div>
               <Button type="submit" className="w-full" disabled={reqPending}>
