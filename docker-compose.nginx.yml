@@ -1,0 +1,11 @@
+# Override for a HOST-LEVEL reverse proxy (Nginx) fronting multiple domains on
+# one droplet. Layered by deploy.sh when REVERSE_PROXY=nginx.
+#   - The app is published on 127.0.0.1:3000 (localhost only) for Nginx to proxy.
+#   - Caddy releases 80/443 (host Nginx owns them). It still starts but binds
+#     nothing, so it does no harm; you can also just not run it.
+services:
+  app:
+    ports:
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
+  caddy:
+    ports: []
