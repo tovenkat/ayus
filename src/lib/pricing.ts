@@ -25,10 +25,15 @@ export const PRICING: Record<SubscriptionTier, TierDef> = {
     priceInrPerYear: 0,
     reportsPerMonth: 5,
     membersIncluded: 1,
-    byokAllowed: false,
+    byokAllowed: true,
     apiAccess: false,
     slaHours: null,
-    features: ["Local Ollama only", "5 reports / month", "Obsidian-compatible vault"],
+    features: [
+      "Local Ollama (free) or bring your own key (BYOK)",
+      "Use your own Gemini / OpenAI / Claude key — entry models",
+      "5 reports / month",
+      "Obsidian-compatible vault",
+    ],
   },
   PERSONAL: {
     id: "PERSONAL",
@@ -213,7 +218,7 @@ export const MODELS: ModelDef[] = [
     contextWindow: 1_000_000,
     inputUsdPerMillion: 0.075,
     outputUsdPerMillion: 0.30,
-    tierMin: "PERSONAL",
+    tierMin: "FREE",
     role: ["extract", "ocr", "chat"],
   },
   {
@@ -236,7 +241,7 @@ export const MODELS: ModelDef[] = [
     contextWindow: 128000,
     inputUsdPerMillion: 0.15,
     outputUsdPerMillion: 0.60,
-    tierMin: "PERSONAL",
+    tierMin: "FREE",
     role: ["extract", "ocr", "chat"],
   },
   {
@@ -259,7 +264,7 @@ export const MODELS: ModelDef[] = [
     contextWindow: 200000,
     inputUsdPerMillion: 0.25,
     outputUsdPerMillion: 1.25,
-    tierMin: "PERSONAL",
+    tierMin: "FREE",
     role: ["extract", "ocr", "chat"],
   },
   {
