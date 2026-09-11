@@ -17,8 +17,21 @@ const DEFAULT_MODELS: Record<CloudProvider, string> = {
   LLAMACPP: "llamacpp-model",    // placeholder — llama-server accepts any id when only one model is loaded
 };
 
-const MAX_RETRIES = 2;
-const RETRY_DELAYS = [1000, 2000]; // ms
+const MAX_RETRIES = 4;
+const BASE_DELAY = 800; // ms; exponential backoff with jitter (≈0.8s→6.4s)
+
+/**
+ * Is this error worth retrying? Retry rate-limits (429) and server/overload
+ * errors (5xx incl. 503 "high demand" on preview models), plus transient
+ * network faults. The Gemini/OpenAI/Anthropic SDKs sometimes surface a numeric
+ * `.status`, sometimes only a message — check both.
+ */
+function isTransient(err: unknown): boolean {
+  const status = (err as { status?: number }).status;
+  if (typeof status === "number") return status === 429 || status >= 500;
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return /\b(429|5\d\d)\b|unavailable|overloaded|high demand|rate limit|resource exhausted|timeout|timed out|econnreset|etimedout|fetch failed|socket hang up/.test(msg);
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -33,17 +46,16 @@ function guessMimeType(base64: string): ImageMimeType {
   return "image/png";
 }
 
-async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
+async function withRetry<T>(fn: () => Promise<T>, label = "cloud"): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     try {
       return await fn();
     } catch (err) {
-      if (attempt >= MAX_RETRIES) throw err;
-      const status = (err as { status?: number }).status;
-      // Only retry on transient errors (429 rate limit, 5xx server errors)
-      if (status && status !== 429 && status < 500) throw err;
-      const delay = RETRY_DELAYS[attempt] ?? 2000;
-      console.warn(`[cloud] Retry ${attempt + 1}/${MAX_RETRIES} after ${delay}ms:`, err instanceof Error ? err.message : err);
+      if (attempt >= MAX_RETRIES || !isTransient(err)) throw err;
+      // Exponential backoff with jitter so retries don't thundering-herd a
+      // model that's already under load.
+      const delay = Math.round(BASE_DELAY * 2 ** attempt * (0.75 + Math.random() * 0.5));
+      console.warn(`[${label}] transient error — retry ${attempt + 1}/${MAX_RETRIES} in ${delay}ms:`, err instanceof Error ? err.message : err);
       await new Promise((r) => setTimeout(r, delay));
     }
   }
@@ -124,7 +136,9 @@ async function* geminiStream(
     ],
   }));
 
-  const result = await genModel.generateContentStream({ contents });
+  // Retry the connection/first-token step (where 503s land); once tokens are
+  // streaming we don't retry, to avoid re-emitting partial output.
+  const result = await withRetry(() => genModel.generateContentStream({ contents }), "gemini-stream");
   for await (const chunk of result.stream) {
     const text = chunk.text();
     if (text) yield text;
@@ -245,16 +259,20 @@ async function claudeChat(
   const client = new Anthropic({ apiKey });
   const { system, messages: formatted } = toClaudeMessages(messages);
 
-  // Use streaming to avoid 10-minute timeout on long requests
-  const stream = client.messages.stream({
-    model,
-    max_tokens: 32768,
-    temperature: options?.temperature ?? undefined,
-    system,
-    messages: formatted,
-  });
-
-  const response = await stream.finalMessage();
+  // Use streaming to avoid 10-minute timeout on long requests. Retry the whole
+  // request on transient errors (the reviewer pass depends on this call).
+  const response = await withRetry(() =>
+    client.messages
+      .stream({
+        model,
+        max_tokens: 32768,
+        temperature: options?.temperature ?? undefined,
+        system,
+        messages: formatted,
+      })
+      .finalMessage(),
+    "claude",
+  );
 
   const text = response.content
     .filter((b) => b.type === "text")
