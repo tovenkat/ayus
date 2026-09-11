@@ -115,6 +115,20 @@ export async function runExtractionForUpload(
         reportIds.push(ingested.reportId);
         await report(85, `validated ${ingested.testCount} test${ingested.testCount !== 1 ? "s" : ""}${ingested.needsReview ? " (needs review)" : ""}`);
 
+        // Second-opinion pass: re-check low-confidence fields with the reviewer
+        // model (Claude by default). No-op unless REVIEW_LOW_CONFIDENCE=true.
+        try {
+          const { reviewLowConfidenceResults } = await import("@/lib/extraction/reviewer");
+          const rev = await reviewLowConfidenceResults(upload.userId, ingested.reportId, pdfText);
+          if (rev.reviewed > 0) {
+            await report(88, `reviewed ${rev.reviewed} uncertain field${rev.reviewed !== 1 ? "s" : ""}${rev.corrected ? ` (${rev.corrected} corrected)` : ""}`);
+          }
+        } catch (revErr) {
+          const msg = revErr instanceof Error ? revErr.message : String(revErr);
+          console.warn(`[extract-runner] reviewer pass failed for "${upload.originalName}":`, msg);
+          warnings.push(`reviewer: ${msg}`);
+        }
+
         // Wiki pages
         try {
           await report(90, "generating wiki pages");
