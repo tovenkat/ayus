@@ -110,6 +110,17 @@ export async function runExtractionForUpload(
         void report(pct, msg);
       }, upload.userId);
 
+      // Completeness safeguard: recover any tests present in the source text
+      // but missed by the extractor (long-report tail-drop), before persistence
+      // so they get the same enrichment. No-op unless EXTRACTION_COMPLETENESS_CHECK=true.
+      try {
+        const { completeExtraction } = await import("@/lib/extraction/completeness");
+        const comp = await completeExtraction(upload.userId, pdfText, extractionResult);
+        if (comp.added > 0) await report(35, `recovered ${comp.added} missed test${comp.added !== 1 ? "s" : ""}`);
+      } catch (compErr) {
+        warnings.push(`completeness: ${compErr instanceof Error ? compErr.message : String(compErr)}`);
+      }
+
       const ingested = await createReportFromExtraction(upload.userId, upload.id, extractionResult);
       if (ingested) {
         reportIds.push(ingested.reportId);
