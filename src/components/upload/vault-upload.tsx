@@ -191,6 +191,22 @@ const LONG_WAIT_TIPS = [
   "Hang tight — a thorough read beats a fast one for your health data.",
 ];
 
+// Coarse pipeline stages for the checklist. The current server message is
+// matched to the furthest stage it mentions; earlier stages read as done.
+const STAGES: Array<{ label: string; match: RegExp }> = [
+  { label: "Read",     match: /upload|queued|quality|pdf|text|docling|ocr|scan|turning|fine print/i },
+  { label: "Extract",  match: /analyz|extract|\bai\b|llm|native|section|lab values|test rows/i },
+  { label: "Verify",   match: /recover|complete|review|validat|second opinion|missed|nothing/i },
+  { label: "Organize", match: /wiki|embed|index|note|searchable|linking|dots/i },
+  { label: "Done",     match: /done|wrapping|✓/i },
+];
+function stageIndexFor(message: string): number {
+  // Search from the last stage backward so a message that mentions a later
+  // phase advances the checklist (progress-forward bias).
+  for (let i = STAGES.length - 1; i >= 0; i--) if (STAGES[i].match.test(message)) return i;
+  return 0;
+}
+
 const FILE_ICONS: Record<string, typeof FileText> = {
   "application/pdf": FileText,
   "text/markdown": FileText,
@@ -217,6 +233,8 @@ export function VaultUpload() {
   // suffix so the user knows we're not frozen on long steps.
   const statusStartedAt = useRef<number>(Date.now());
   const [nowTick, setNowTick] = useState(0);
+  // Highest pipeline stage reached — only moves forward so checks don't flicker.
+  const maxStageRef = useRef(0);
 
   // Reset the "since" clock every time the server sends a new verb.
   useEffect(() => {
@@ -240,6 +258,11 @@ export function VaultUpload() {
       ? hintsFor(statusMsg)[Math.floor(stuckSec / 4) % hintsFor(statusMsg).length]
       : null;
 
+  // Monotonic current stage — advance the ref, never rewind (so ✓ marks stay).
+  const rawStage = stageIndexFor(statusMsg);
+  if (rawStage > maxStageRef.current) maxStageRef.current = rawStage;
+  const currentStage = maxStageRef.current;
+
   const openFilePicker = useCallback(() => {
     // Clear value first so picking the same file twice still fires onChange
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -259,6 +282,7 @@ export function VaultUpload() {
     if (files.length === 0) return;
 
     setState("uploading");
+    maxStageRef.current = 0; // fresh checklist for this upload
     setErrorMsg("");
     setResult(null);
     setStatusMsg(files.length === 1 ? `Uploading ${files[0].name}` : `Uploading ${files.length} files`);
@@ -425,6 +449,37 @@ export function VaultUpload() {
                     {LONG_WAIT_TIPS[Math.floor(stuckSec / 12) % LONG_WAIT_TIPS.length]}
                   </p>
                 )}
+
+                {/* Pipeline stage checklist — visible forward momentum */}
+                <div className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 mt-4 text-[11px]">
+                  {STAGES.map((s, i) => {
+                    const done = i < currentStage;
+                    const active = i === currentStage;
+                    return (
+                      <span key={s.label} className="flex items-center gap-1.5">
+                        {i > 0 && <span className="text-muted-foreground/30">→</span>}
+                        <span
+                          className={
+                            done
+                              ? "flex items-center gap-1 text-emerald-600 dark:text-emerald-400"
+                              : active
+                                ? "flex items-center gap-1 text-primary font-medium"
+                                : "flex items-center gap-1 text-muted-foreground/40"
+                          }
+                        >
+                          {done ? (
+                            <Check className="size-3" />
+                          ) : active ? (
+                            <Loader2 className="size-3 animate-spin" />
+                          ) : (
+                            <span className="inline-block size-2 rounded-full border border-current" />
+                          )}
+                          {s.label}
+                        </span>
+                      </span>
+                    );
+                  })}
+                </div>
               </div>
               <div
                 className="mt-5 h-2 w-full overflow-hidden rounded-full bg-muted"
