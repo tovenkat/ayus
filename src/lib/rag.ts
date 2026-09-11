@@ -48,7 +48,9 @@ export async function retrieveContext(
           documentId: result.metadata.documentId as string,
           slug: result.metadata.slug as string,
           title: result.metadata.title as string,
-          content: result.text.slice(0, CHUNK_CHARS),
+          // Strip [[wikilinks]] so the model doesn't echo raw markup like
+          // "(Source: [[MCHC]])" into chat answers (the keyword path already does).
+          content: stripWikilinks(result.text).slice(0, CHUNK_CHARS),
         });
       }
     }

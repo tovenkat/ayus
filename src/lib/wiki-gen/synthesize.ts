@@ -38,12 +38,18 @@ interface ReportForWiki {
 
 // ── Formatting helpers ──────────────────────────────────────────────────────
 
+function isValidDate(d: Date | null | undefined): d is Date {
+  return d instanceof Date && !Number.isNaN(d.getTime());
+}
+
 function formatDateISO(d: Date | null): string {
-  return (d ?? new Date()).toISOString().split("T")[0];
+  // Guard invalid Dates (not just null) — d.toISOString() throws on those.
+  return (isValidDate(d) ? d : new Date()).toISOString().split("T")[0];
 }
 
 function formatDateHuman(d: Date | null): string {
-  return d
+  // A non-null but invalid Date otherwise renders as the literal "Invalid Date".
+  return isValidDate(d)
     ? d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
     : "Unknown date";
 }
