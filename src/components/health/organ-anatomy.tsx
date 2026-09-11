@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { PersonStanding } from "lucide-react";
+import { PersonStanding, ArrowRight } from "lucide-react";
 
 // One region = one svgRegionId, aggregating organ systems that map to it
 // (e.g. pancreas + metabolic). Real data from getOrganPanels.
@@ -43,7 +44,7 @@ const STATUS_LABEL: Record<Status, string> = { healthy: "Normal", watch: "Watch"
 
 const BODY_REGIONS = ["thyroid", "heart", "liver", "pancreas", "kidney", "bladder"];
 
-export function OrganAnatomy({ regions, title = "Organ health" }: { regions: RegionPanel[]; title?: string }) {
+export function OrganAnatomy({ regions, title = "Organ health", href = "/dashboard/organs" }: { regions: RegionPanel[]; title?: string; href?: string | null }) {
   const byId = new Map(regions.map((r) => [r.regionId, r]));
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -61,7 +62,16 @@ export function OrganAnatomy({ regions, title = "Organ health" }: { regions: Reg
   return (
     <Card className="overflow-hidden">
       <CardHeader className="pb-2">
-        <CardTitle className="text-base flex items-center gap-2"><PersonStanding className="size-4" /> {title}</CardTitle>
+        <CardTitle className="text-base">
+          {href ? (
+            <Link href={href} className="group inline-flex items-center gap-2 hover:text-primary transition-colors">
+              <PersonStanding className="size-4" /> {title}
+              <ArrowRight className="size-3.5 text-muted-foreground/60 group-hover:text-primary group-hover:translate-x-0.5 transition" />
+            </Link>
+          ) : (
+            <span className="inline-flex items-center gap-2"><PersonStanding className="size-4" /> {title}</span>
+          )}
+        </CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
         <div className="flex flex-col items-center">

@@ -58,5 +58,6 @@ export async function OrganAnatomySection({ userId }: { userId?: string }) {
   const uid = userId ?? (await requireAuth());
   const regions = await getOrganRegions(uid);
   if (regions.length === 0) return null;
-  return <OrganAnatomy regions={regions} />;
+  // On the organs page itself the title shouldn't link back to the same page.
+  return <OrganAnatomy regions={regions} href={null} />;
 }
