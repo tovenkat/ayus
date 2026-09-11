@@ -239,11 +239,17 @@ export function loadAIConfig(): AIConfig {
   const backend = internetLlm ? `Cloud (${internetLlm})` : useOllama ? `Ollama (${ollamaHost})` : "Local (GGUF)";
   const effectiveChat = internetLlm ? (internetLlmModel ?? CLOUD_DEFAULT_MODELS[internetLlm]) : chatModel;
   const effectiveEmbed = useOllama ? embedModel : embedModelDirName;
+  // Extraction goes to the cloud provider when CLOUD_EXTRACTION=true; otherwise
+  // it's the local EXTRACT_MODEL. Show what's actually used (the env EXTRACT_MODEL
+  // is only the local fallback in cloud-extraction mode).
+  const effectiveExtract = internetLlm && cloudExtraction
+    ? `${effectiveChat} (cloud) · local fallback ${extractModel}`
+    : extractModel;
 
   console.log(`\n┌─ AI Models ──────────────────────────────────────`);
   console.log(`│  Backend : ${backend}`);
   console.log(`│  Chat    : ${effectiveChat}`);
-  console.log(`│  Extract : ${extractModel}`);
+  console.log(`│  Extract : ${effectiveExtract}`);
   console.log(`│  OCR     : ${ocrModel ?? `${extractModel} (fallback)`}`);
   console.log(`│  Embed   : ${effectiveEmbed}`);
   console.log(`│  VectorDB: ${vectorDb}${vectorDb === "lancedb" ? ` → ${lancedbPath}` : vectorDb === "pgvector" ? " → Postgres" : ""}`);
