@@ -68,6 +68,10 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      # Same as the app — so seed/reembed scripts can reach Ollama for embeddings
+      # (without this, embedding in `docker compose run migrate` hits localhost
+      # inside the one-off container and fails).
+      OLLAMA_HOST: http://ollama:11434
     depends_on:
       postgres:
         condition: service_healthy
