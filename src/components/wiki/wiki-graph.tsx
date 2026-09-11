@@ -62,6 +62,30 @@ function radiusFor(degree: number): number {
   return 5 + Math.min(8, Math.sqrt(degree) * 2);
 }
 
+/** Transform (pan+zoom) that frames all nodes within the viewport, with margin. */
+function computeFit(
+  nodes: { x: number; y: number; degree: number }[],
+  width: number,
+  height: number,
+): { x: number; y: number; scale: number } | null {
+  if (nodes.length === 0) return null;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const n of nodes) {
+    const r = radiusFor(n.degree) + 16; // include some label headroom
+    minX = Math.min(minX, n.x - r); maxX = Math.max(maxX, n.x + r);
+    minY = Math.min(minY, n.y - r); maxY = Math.max(maxY, n.y + r);
+  }
+  const w = Math.max(1, maxX - minX);
+  const h = Math.max(1, maxY - minY);
+  const margin = 32;
+  const scale = Math.max(0.2, Math.min(2.5, Math.min((width - margin) / w, (height - margin) / h)));
+  return {
+    x: width / 2 - scale * (minX + maxX) / 2,
+    y: height / 2 - scale * (minY + maxY) / 2,
+    scale,
+  };
+}
+
 export function WikiGraph({ graph }: Props) {
   const router = useRouter();
   const svgRef = useRef<SVGSVGElement>(null);
@@ -84,6 +108,7 @@ export function WikiGraph({ graph }: Props) {
   const alphaRef = useRef(1);        // simulation "heat" — cools to 0 and settles
   const rafRef = useRef(0);          // 0 = loop stopped
   const tickRef = useRef<() => void>(() => {});
+  const fittedRef = useRef(false);   // auto-fit the view once per layout
 
   // Resize observer
   useEffect(() => {
@@ -216,10 +241,17 @@ export function WikiGraph({ graph }: Props) {
       } else {
         for (const n of nodes) { n.vx = 0; n.vy = 0; } // stop residual drift
         rafRef.current = 0; // settled — no more frames
+        // Frame the settled layout once, so the graph always opens fully in view.
+        if (!fittedRef.current && nodes.length > 0) {
+          const fit = computeFit(nodes, dimensions.width, dimensions.height);
+          if (fit) setTransform(fit);
+          fittedRef.current = true;
+        }
       }
     };
     tickRef.current = tick;
     alphaRef.current = 1;                       // heat up on (re)seed / resize
+    fittedRef.current = false;                  // re-fit the view for the new layout
     cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
@@ -277,7 +309,9 @@ export function WikiGraph({ graph }: Props) {
     draggingRef.current.id = null;
   }, []);
 
-  const resetView = () => setTransform({ x: 0, y: 0, scale: 1 });
+  // Reset = re-frame the graph to fit (falls back to identity if no nodes yet).
+  const resetView = () =>
+    setTransform(computeFit(simNodesRef.current, dimensions.width, dimensions.height) ?? { x: 0, y: 0, scale: 1 });
   const zoomIn = () => setTransform((t) => ({ ...t, scale: Math.min(3, t.scale * 1.2) }));
   const zoomOut = () => setTransform((t) => ({ ...t, scale: Math.max(0.2, t.scale / 1.2) }));
 
