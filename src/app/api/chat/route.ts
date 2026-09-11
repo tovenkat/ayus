@@ -24,12 +24,12 @@ RULES:
 const HEALTH_SYSTEM_PROMPT = `You are the user's personal health assistant. You have direct access to their current biomarkers, active medications, diet schedule, and last doctor visit through the <health_snapshot> block provided below. You also receive relevant document chunks from their wiki for deeper context.
 
 RULES:
-1. Prefer the structured <health_snapshot> for facts about current state (latest readings, meds). Use the wiki chunks for narrative context, history, and any facts not in the snapshot.
-2. Cite wiki documents when you reference them. You do not need to cite the snapshot — it's live DB state.
-3. Understand Indian lab formats (Thyrocare, SRL, Apollo, Dr Lal), common medical abbreviations, and Indian reference ranges.
-4. If asked about trends (e.g., "how has my HbA1c been?"), answer with actual dates and values from the snapshot or wiki, not guesses.
-5. If you notice concerning values or interactions, flag them clearly — but never diagnose. Always recommend discussing with their doctor.
-6. If a question is outside the record (e.g., "what should I eat tonight?"), you can give general guidance informed by their biomarkers, but remind them it's a discussion aid, not medical advice.
+1. Use the <health_snapshot> for facts about their current state (latest readings, meds) and the wiki chunks for history/narrative. These are BACKGROUND about this person — not the limit of what you can discuss. You may and should draw on general medical and nutrition knowledge to actually answer the question.
+2. Cite wiki documents when you quote a specific record. You do not need to cite the snapshot — it's live DB state. Do NOT say "there is no information in your documents" for a general-knowledge question (e.g. dietary sources, lifestyle) — those aren't expected to be in their records; just answer them.
+3. For "how do I improve / raise / lower / what should I eat for X" questions, give PRACTICAL, specific guidance: common dietary sources, foods to favor or limit, and lifestyle steps — tailored to their latest value and any relevant condition or medication you can see. Lead with the answer, not a disclaimer.
+4. If asked about trends (e.g., "how has my HbA1c been?"), use actual dates and values from the snapshot or wiki, not guesses.
+5. If you notice concerning values or interactions, flag them clearly — but never diagnose. When you give diet/lifestyle guidance, close with a brief reminder that it's educational and their doctor or dietitian should guide changes — one line, not a wall of caveats.
+6. Understand Indian lab formats (Thyrocare, SRL, Apollo, Dr Lal), common medical abbreviations, and Indian reference ranges and foods.
 7. Be concise and direct. Use bullet points for lists.`;
 
 const LAB_SYSTEM_PROMPT = `You assist staff at a diagnostic lab. The user works at a lab/diagnostic center; they upload reports for many different patients.
@@ -53,17 +53,19 @@ RULES:
 4. Understand Indian lab formats (Thyrocare, SRL, Apollo, Dr Lal), abbreviations, and ranges.
 5. Be concise; clinicians read fast.`;
 
-function systemPromptFor(kind: AccountKind, healthMode: boolean): string {
+function systemPromptFor(kind: AccountKind, healthMode?: boolean): string {
   switch (kind) {
     case "lab":
       return LAB_SYSTEM_PROMPT;
     case "doctor":
       return DOCTOR_SYSTEM_PROMPT;
     case "personal":
-      return healthMode ? HEALTH_SYSTEM_PROMPT : DEFAULT_SYSTEM_PROMPT;
     case "unknown":
     default:
-      return healthMode ? HEALTH_SYSTEM_PROMPT : DEFAULT_SYSTEM_PROMPT;
+      // This is a personal health app — the assistant is a health assistant by
+      // default (with the live snapshot), not a bare wiki-search bot. healthMode
+      // is retained for callers that want the plain document-QA prompt.
+      return healthMode === false ? DEFAULT_SYSTEM_PROMPT : HEALTH_SYSTEM_PROMPT;
   }
 }
 
@@ -114,8 +116,10 @@ export async function POST(req: Request) {
     // ── Resolve account kind so the agent adapts (personal / lab / doctor) ─
     const accountKind = await getAccountKind(userId);
 
-    // Health snapshot is only meaningful for the patient themselves.
-    const wantSnapshot = healthMode && accountKind === "personal";
+    // The personal chat is a health assistant by default (snapshot on) unless
+    // the caller explicitly asked for plain document-QA (healthMode === false).
+    const wantSnapshot =
+      healthMode !== false && (accountKind === "personal" || accountKind === "unknown");
 
     // ── Retrieve context (RAG chunks + optional structured snapshot) ──────
     const [context, snapshot] = await Promise.all([
@@ -124,7 +128,7 @@ export async function POST(req: Request) {
     ]);
 
     // ── Build messages ────────────────────────────────────────────────────
-    const systemPrompt = systemPromptFor(accountKind, !!healthMode);
+    const systemPrompt = systemPromptFor(accountKind, healthMode);
     console.log(`[chat] user=${userId} kind=${accountKind} snapshot=${!!snapshot}`);
 
     const contextBlock = context.contextText
