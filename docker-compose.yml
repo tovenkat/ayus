@@ -47,12 +47,18 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
       OLLAMA_HOST: http://ollama:11434
       UPLOADS_DIR: /data/uploads
+      # Wiki vault on a persistent, shared volume so markdown pages survive
+      # container restarts AND the app + migrate containers see the same files
+      # (without this the vault is per-container ephemeral, so deletes/edits on
+      # one container can't see pages written by another).
+      VAULT_ROOT: /data/vault
       # Reach the GLiNER sidecar over the internal network (only used when
       # ENABLE_GLINER=true and the "gliner" profile is up). Harmless otherwise —
       # the client fails fast and skips NER if the sidecar isn't reachable.
       GLINER_SIDECAR_URL: http://gliner:8001
     volumes:
       - uploads:/data/uploads
+      - vault:/data/vault
     depends_on:
       postgres:
         condition: service_healthy
@@ -72,6 +78,12 @@ services:
       # (without this, embedding in `docker compose run migrate` hits localhost
       # inside the one-off container and fails).
       OLLAMA_HOST: http://ollama:11434
+      # Share the same vault volume as the app so seeded/generated wiki pages
+      # land where the app reads + deletes them.
+      VAULT_ROOT: /data/vault
+    volumes:
+      - uploads:/data/uploads
+      - vault:/data/vault
     depends_on:
       postgres:
         condition: service_healthy
@@ -120,6 +132,7 @@ volumes:
   pgdata:
   ollama:
   uploads:
+  vault: # wiki markdown vault — persistent + shared by app and migrate
   caddy_data:
   caddy_config:
   hf_cache: # GLiNER model weights (HuggingFace cache), persisted across restarts

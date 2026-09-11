@@ -170,32 +170,40 @@ export async function cascadeDeleteUpload(userId: string, uploadId: string): Pro
     // Delete the lab-report summary
     await removeWikiPage(userId, `lab-reports/${dateStr}.md`);
 
-    // Patch biomarker entity pages — strip entries tied to this report's date
+    // Clean up biomarker entity pages. This is driven by the DATABASE, not the
+    // disk file — the vault may live on a different/ephemeral filesystem than
+    // the one serving this request, so a missing .md file must not leave the
+    // Document (which is what Health Notes + Graph read) orphaned.
     const uniqueNames = Array.from(
       new Set(report.testResults.map((t) => t.normalizedName)),
     );
     for (const name of uniqueNames) {
       const slug = toSlug(name);
       const entityRel = `entities/${slug}.md`;
-      const abs = path.join(userScope(userId), "wiki", entityRel);
-      let content: string | null = null;
-      try {
-        content = await fs.readFile(abs, "utf8");
-      } catch {
-        continue;
-      }
-      const rewritten = stripReportFromEntity(content, dateFormatted);
-      if (rewritten === null) {
-        // No readings left — remove the whole entity page + DB doc + vectors
+
+      // Is this biomarker still referenced by any OTHER report? (The deleted
+      // report's TestResults still exist here — we delete the Upload at step 5.)
+      const otherRefs = await prisma.testResult.count({
+        where: { userId, normalizedName: name, reportId: { not: report.id } },
+      });
+
+      if (otherRefs === 0) {
+        // Only this report had it → remove the entity page + DB doc + vectors.
         await removeWikiPage(userId, entityRel);
       } else {
-        await fs.writeFile(abs, rewritten);
-        // Re-index the DB cache against the new content
+        // Still referenced → best-effort strip this report's readings from the
+        // on-disk page if present; the DB Document correctly stays either way.
+        const abs = path.join(userScope(userId), "wiki", entityRel);
         try {
-          const { indexFileFromDisk } = await import("@/lib/vault-reconcile");
-          await indexFileFromDisk(userId, entityRel);
-        } catch (err) {
-          console.warn(`[delete-upload] reindex failed for ${entityRel}:`, err instanceof Error ? err.message : err);
+          const content = await fs.readFile(abs, "utf8");
+          const rewritten = stripReportFromEntity(content, dateFormatted);
+          if (rewritten !== null) {
+            await fs.writeFile(abs, rewritten);
+            const { indexFileFromDisk } = await import("@/lib/vault-reconcile");
+            await indexFileFromDisk(userId, entityRel);
+          }
+        } catch {
+          // No disk file on this filesystem — nothing to strip; DB doc stays.
         }
       }
     }
