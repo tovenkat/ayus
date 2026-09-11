@@ -47,12 +47,42 @@ for kv in OLLAMA_KEEP_ALIVE=-1 OLLAMA_MAX_LOADED_MODELS=3 OLLAMA_NUM_PARALLEL=2 
   k="${kv%%=*}"; grep -q "^${k}=" .env && sed -i "s#^${k}=.*#${kv}#" .env || echo "$kv" >> .env
 done
 
-# ── Optional: GLiNER NER sidecar (clinical PDFs). Needs the 8 GB+ droplet.
-grep -q '^ENABLE_GLINER=' .env && sed -i 's/^ENABLE_GLINER=.*/ENABLE_GLINER=true/' .env || echo "ENABLE_GLINER=true" >> .env
+# ── Cloud AI (current default: better medical accuracy for ~1 month) ──────────
+# Gemini = primary extraction + chat; CLOUD_EXTRACTION lets it handle documents
+# (not just chat). We chose cloud over GLiNER, so the sidecar is OFF.
+set_env() { grep -q "^$1=" .env && sed -i "s#^$1=.*#$1=$2#" .env || echo "$1=$2" >> .env; }
+set_env INTERNET_LLM GEMINI
+set_env INTERNET_LLM_MODEL gemini-2.5-pro
+set_env CLOUD_EXTRACTION true
+set_env ENABLE_GLINER false
+# paste the real key directly on the droplet (never commit it):
+set_env GEMINI_API_KEY 'AIzaSy...'
 
-# Sanity-check what you ended up with:
-grep -E '^(ENCRYPTION_KEY|AUTH_TRUST_HOST|DEMO_OTP_AUTOFILL|CHAT_MODEL|EXTRACT_MODEL|OLLAMA_MODELS|OLLAMA_KEEP_ALIVE|OLLAMA_MAX_LOADED_MODELS|OLLAMA_NUM_PARALLEL|RAG_CHUNK_LIMIT|CHAT_NUM_CTX|CHAT_NUM_PREDICT|ENABLE_GLINER)=' .env
+# ── Second-opinion reviewer: Claude re-checks only low-confidence fields ──────
+set_env REVIEW_LOW_CONFIDENCE true
+set_env REVIEWER_PROVIDER CLAUDE
+set_env REVIEW_MODEL claude-sonnet-5
+# needs a Claude key too (reviewer only — small cost):
+set_env CLAUDE_API_KEY 'sk-ant-...'
+
+# Sanity-check what you ended up with (keys shown as set/unset, not values):
+grep -E '^(ENCRYPTION_KEY|AUTH_TRUST_HOST|DEMO_OTP_AUTOFILL|CHAT_MODEL|EXTRACT_MODEL|OLLAMA_MODELS|OLLAMA_KEEP_ALIVE|OLLAMA_MAX_LOADED_MODELS|OLLAMA_NUM_PARALLEL|RAG_CHUNK_LIMIT|CHAT_NUM_CTX|CHAT_NUM_PREDICT|ENABLE_GLINER|INTERNET_LLM|INTERNET_LLM_MODEL|CLOUD_EXTRACTION|REVIEW_LOW_CONFIDENCE|REVIEWER_PROVIDER|REVIEW_MODEL)=' .env \
+  | sed -E 's/(_API_KEY=).+/\1<set>/'
 ```
+
+> **Local-only alternative:** to stay off the cloud, skip the two blocks above,
+> keep `INTERNET_LLM=` blank, `CLOUD_EXTRACTION=false`, and use the 7B local
+> preset (already set above). GLiNER (`ENABLE_GLINER=true`) is the local option
+> for clinical-narrative NER; leave it off when using cloud extraction.
+
+> **Revert to local at month-end:**
+> ```bash
+> cd /opt/ayus
+> sed -i 's/^INTERNET_LLM=.*/INTERNET_LLM=/' .env
+> sed -i 's/^CLOUD_EXTRACTION=.*/CLOUD_EXTRACTION=false/' .env
+> sed -i 's/^REVIEW_LOW_CONFIDENCE=.*/REVIEW_LOW_CONFIDENCE=false/' .env
+> docker compose -f docker-compose.yml -f docker-compose.nginx.yml up -d app
+> ```
 
 ## 3. Apply + pull models
 ```bash
@@ -94,6 +124,10 @@ $DC exec -T ollama ollama list                     # 7B + deepseek-ocr + nomic-e
 $DC exec -T app sh -c "wget -qO- http://ollama:11434/api/version"   # app → ollama OK
 curl -I https://ayus.in                            # 200/redirect, valid TLS
 $DC logs --tail=40 app | grep -iE "error|fetch|untrustedhost" || echo "app clean"
+# after a chat/upload, confirm the cloud provider + reviewer are actually used:
+$DC logs --tail=80 app | grep -iE "provider resolved|\[reviewer\]"
+#   want: "provider resolved (env): GEMINI / gemini-2.5-pro · key=✓"
+#         "[reviewer] CLAUDE/claude-sonnet-5: reviewed N, corrected M …"
 # GLiNER (if enabled):
 docker compose -f docker-compose.yml -f docker-compose.nginx.yml --profile gliner \
   exec -T gliner python -c "import urllib.request;print(urllib.request.urlopen('http://localhost:8001/health').read())"
