@@ -147,18 +147,49 @@ async function pollAllJobs(
 // These aren't guesses about internal work — they name plausible sub-steps
 // the LLM / OCR is actually running through.
 const HINTS: Array<{ match: RegExp; hints: string[] }> = [
-  { match: /\b(section|analyz|extract|ai|llm)\b/i, hints: ["reading test rows", "matching biomarker names", "checking units", "flagging out-of-range values", "waiting on LLM"] },
-  { match: /\bwiki\b/i,                             hints: ["linking biomarkers", "writing markdown", "resolving references"] },
-  { match: /\bembed/i,                              hints: ["computing vectors", "indexing chunks"] },
-  { match: /\bdocling|ocr\b/i,                      hints: ["rasterizing pages", "detecting tables", "recognizing characters"] },
-  { match: /\bpdf|extract.*text/i,                  hints: ["walking pages", "reading text layer"] },
+  { match: /recover|complete/i,                     hints: ["making sure nothing slipped through", "re-reading the last pages", "catching every value"] },
+  { match: /review/i,                               hints: ["getting a second opinion", "sanity-checking the tricky numbers"] },
+  { match: /\b(section|analyz|extract|ai|llm|native)\b/i, hints: ["reading your test rows", "matching biomarker names", "checking the units", "spotting out-of-range values", "thinking it over"] },
+  { match: /\bwiki\b/i,                             hints: ["linking your biomarkers", "writing up your notes", "connecting the dots"] },
+  { match: /\bembed/i,                              hints: ["making it searchable", "indexing your results"] },
+  { match: /\bdocling|ocr\b/i,                      hints: ["scanning the pages", "finding the tables", "reading the print"] },
+  { match: /\bpdf|extract.*text|quality/i,          hints: ["turning pages", "reading the fine print", "sizing up the report"] },
 ];
-const DEFAULT_HINTS = ["still working", "hang tight", "processing"];
+const DEFAULT_HINTS = ["almost there", "hang tight", "on it"];
 
 function hintsFor(message: string): string[] {
   for (const { match, hints } of HINTS) if (match.test(message)) return hints;
   return DEFAULT_HINTS;
 }
+
+// Human-friendly headline for the raw server status verb. Keeps the loading
+// state warm instead of showing internal phase words like "native extraction".
+const FRIENDLY: Array<{ match: RegExp; label: string }> = [
+  { match: /queued|waiting for worker/i, label: "Getting in line" },
+  { match: /uploading/i,                 label: "Uploading your file" },
+  { match: /quality|turning pages/i,     label: "Sizing up your report" },
+  { match: /docling|ocr|rasteriz|scan/i, label: "Reading the scanned pages" },
+  { match: /recover|complete/i,          label: "Double-checking nothing was missed" },
+  { match: /review/i,                    label: "Getting a second opinion" },
+  { match: /analyz|extract|ai|llm|native/i, label: "Pulling out your lab values" },
+  { match: /validated|classif/i,         label: "Making sense of the results" },
+  { match: /wiki/i,                      label: "Organizing your health notes" },
+  { match: /embed|vector|index/i,        label: "Making it searchable" },
+  { match: /done|✓|complete/i,           label: "Wrapping up" },
+  { match: /pdf|text/i,                  label: "Reading your report" },
+];
+function friendlyStatus(message: string): string {
+  for (const { match, label } of FRIENDLY) if (match.test(message)) return label;
+  return "Working on it";
+}
+
+// Reassurance shown when a single step sits for a while, so a long wait feels
+// intentional (accuracy) rather than stuck.
+const LONG_WAIT_TIPS = [
+  "Long reports take a moment — we read every page so nothing's missed.",
+  "Accuracy first — cross-checking the numbers against your report.",
+  "Hang tight — a thorough read beats a fast one for your health data.",
+];
 
 const FILE_ICONS: Record<string, typeof FileText> = {
   "application/pdf": FileText,
@@ -381,12 +412,17 @@ export function VaultUpload() {
               <div className="flex flex-col items-center">
                 <Loader2 className="size-12 text-primary animate-spin mb-4" />
                 <p className="text-base font-medium wrap-break-word text-center">
-                  {statusMsg}
+                  {friendlyStatus(statusMsg)}
                   <span className="inline-block w-6 text-left animate-pulse">…</span>
                 </p>
                 {activityHint && (
                   <p className="text-xs text-muted-foreground mt-1 tabular-nums text-center">
                     {activityHint} · {stuckSec}s
+                  </p>
+                )}
+                {stuckSec >= 12 && (
+                  <p className="text-xs text-muted-foreground/80 mt-2 max-w-xs text-center text-balance">
+                    {LONG_WAIT_TIPS[Math.floor(stuckSec / 12) % LONG_WAIT_TIPS.length]}
                   </p>
                 )}
               </div>
