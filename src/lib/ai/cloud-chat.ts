@@ -252,7 +252,7 @@ function toClaudeMessages(messages: ChatMessage[]) {
 // Claude 5-generation models removed the `temperature` parameter — sending it
 // returns 400 "temperature is deprecated for this model". Include it only for
 // models that still accept it.
-function claudeTemperature(model: string, options?: ChatOptions): { temperature?: number } {
+function claudeTemperature(model: string, options?: { temperature?: number }): { temperature?: number } {
   if (options?.temperature === undefined) return {};
   if (/claude-(opus|sonnet|haiku)-5|claude-5/i.test(model)) return {};
   return { temperature: options.temperature };
@@ -364,24 +364,28 @@ async function claudeExtract(
 
   const toolName = options.schemaName ?? "extract_lab_report";
 
-  // Use streaming to avoid 10-minute timeout on long requests
-  const stream = client.messages.stream({
-    model,
-    max_tokens: 32768,
-    temperature: options.temperature ?? 0,
-    system: systemPrompt,
-    messages: [{ role: "user", content: contentBlocks }],
-    tools: [
-      {
-        name: toolName,
-        description: "Extract structured lab report data from the provided document.",
-        input_schema: options.schema as { type: "object"; [k: string]: unknown },
-      },
-    ],
-    tool_choice: { type: "tool" as const, name: toolName },
-  });
-
-  const result = await stream.finalMessage();
+  // Use streaming to avoid 10-minute timeout on long requests; retry transient
+  // errors. Omit temperature for Claude 5 models (they rejected it → 400).
+  const result = await withRetry(() =>
+    client.messages
+      .stream({
+        model,
+        max_tokens: 32768,
+        ...claudeTemperature(model, options),
+        system: systemPrompt,
+        messages: [{ role: "user", content: contentBlocks }],
+        tools: [
+          {
+            name: toolName,
+            description: "Extract structured lab report data from the provided document.",
+            input_schema: options.schema as { type: "object"; [k: string]: unknown },
+          },
+        ],
+        tool_choice: { type: "tool" as const, name: toolName },
+      })
+      .finalMessage(),
+    "claude-extract",
+  );
 
   // Extract the tool_use block — with tool_choice forcing a specific tool,
   // the response always contains exactly one tool_use block
