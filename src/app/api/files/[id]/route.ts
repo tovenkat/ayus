@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { storage } from "@/lib/storage";
 import { requireApiAuth } from "@/lib/auth-helpers";
@@ -50,6 +51,12 @@ export async function DELETE(_request: Request, { params }: Params) {
   }
 
   await cascadeDeleteUpload(userId, id);
+
+  // Bust the cached views that read the now-deleted derived data, so navigating
+  // to them shows the update instead of a stale client-router-cached version.
+  for (const p of ["/wiki", "/wiki/graph", "/dashboard", "/reports", "/upload"]) {
+    revalidatePath(p);
+  }
 
   return NextResponse.json({ ok: true });
 }
