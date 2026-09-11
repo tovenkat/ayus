@@ -95,10 +95,38 @@ async function resolveForRole(userId: string, role: "extract" | "ocr" | "chat"):
     organizationId: org?.id ?? null,
   });
 
-  // Resolve the candidate provider (user > org > env > local default).
+  // Precedence: privacyMode (above) > explicit user choice > explicit *cloud*
+  // org choice > deployment default (env INTERNET_LLM) > bare-local org default
+  // > local. A plain OLLAMA_LOCAL org default is the schema fallback, not a
+  // deliberate "this org must stay local" — so a deployment-wide INTERNET_LLM
+  // beats it. privacyMode is the way to force local per user.
+  const orgProvider = org?.defaultAiProvider ?? null;
+  const orgChoseCloud = !!orgProvider && orgProvider !== "OLLAMA_LOCAL";
+  const orgCandidate = (): ResolvedAiSettings => ({
+    provider: orgProvider!,
+    model: modelFor(orgProvider!, org!.defaultAiModel),
+    apiKey: org!.byokKeyEncrypted ? decryptSecret(org!.byokKeyEncrypted) : systemKeyFor(orgProvider!),
+    baseURL: baseURLFor(orgProvider!),
+    source: "org",
+    userId,
+    organizationId: org!.id,
+  });
+  const envCandidate = (): ResolvedAiSettings => {
+    const provider = config.internetLlm as AiProvider;
+    return {
+      provider,
+      model: config.internetLlmModel ?? modelFor(provider),
+      apiKey: config.internetLlmApiKey,
+      baseURL: baseURLFor(provider),
+      source: "env",
+      userId,
+      organizationId: org?.id ?? null,
+    };
+  };
+
   let candidate: ResolvedAiSettings;
   if (user.aiProvider) {
-    // 2. User preference
+    // 2. Explicit user preference (BYOK)
     candidate = {
       provider: user.aiProvider,
       model: modelFor(user.aiProvider, user.aiModel),
@@ -108,29 +136,15 @@ async function resolveForRole(userId: string, role: "extract" | "ocr" | "chat"):
       userId,
       organizationId: org?.id ?? null,
     };
-  } else if (org?.defaultAiProvider) {
-    // 3. Org default
-    candidate = {
-      provider: org.defaultAiProvider,
-      model: modelFor(org.defaultAiProvider, org.defaultAiModel),
-      apiKey: org.byokKeyEncrypted ? decryptSecret(org.byokKeyEncrypted) : systemKeyFor(org.defaultAiProvider),
-      baseURL: baseURLFor(org.defaultAiProvider),
-      source: "org",
-      userId,
-      organizationId: org.id,
-    };
+  } else if (orgChoseCloud) {
+    // 3a. Org explicitly picked a cloud / self-hosted provider — respect it.
+    candidate = orgCandidate();
   } else if (config.internetLlm) {
-    // 4. Env fallback
-    const provider = config.internetLlm as AiProvider;
-    candidate = {
-      provider,
-      model: config.internetLlmModel ?? modelFor(provider),
-      apiKey: config.internetLlmApiKey,
-      baseURL: baseURLFor(provider),
-      source: "env",
-      userId,
-      organizationId: org?.id ?? null,
-    };
+    // 3b. Deployment default (env) beats a bare-local org default.
+    candidate = envCandidate();
+  } else if (orgProvider) {
+    // 3c. Org default is OLLAMA_LOCAL and no env cloud — use it.
+    candidate = orgCandidate();
   } else {
     // 5. Default → local Ollama
     candidate = localSettings("default");
