@@ -146,7 +146,10 @@ async function resolveForRole(userId: string, role: "extract" | "ocr" | "chat"):
     candidate.provider !== "OLLAMA_LOCAL" &&
     candidate.provider !== "VLLM" &&
     candidate.provider !== "LLAMACPP";
-  if (isExtraction && isThirdPartyCloud && !user.cloudExtractionOptIn) {
+  // Allow cloud extraction when the user opted in OR the deployment enabled it
+  // globally (CLOUD_EXTRACTION=true) — otherwise pin extraction/OCR local (PHI).
+  const cloudExtractionAllowed = user.cloudExtractionOptIn || config.cloudExtraction;
+  if (isExtraction && isThirdPartyCloud && !cloudExtractionAllowed) {
     return localSettings("extractionLocal");
   }
 

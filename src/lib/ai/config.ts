@@ -73,6 +73,15 @@ export type AIConfig = {
   extractionStrategy: ExtractionStrategy;
   layoutSidecarUrl: string;
 
+  /**
+   * Deployment-wide opt-in: use the configured cloud provider for document
+   * EXTRACTION/OCR too (not just chat). Off by default so raw reports stay
+   * local (PHI). When true, the operator's INTERNET_LLM / provider choice
+   * powers extraction for everyone — matches the per-user cloudExtractionOptIn
+   * but at the deployment level. See resolveForRole in user-provider.ts.
+   */
+  cloudExtraction: boolean;
+
   // ── Biomedical NER (GLiNER-BioMed) sidecar — narrative clinical text only.
   //    Opt-in (default off); inert until ENABLE_GLINER=true and the sidecar at
   //    GLINER_SIDECAR_URL is running. See scripts/gliner-sidecar/.
@@ -192,6 +201,7 @@ export function loadAIConfig(): AIConfig {
     const n = Number(v);
     return Number.isFinite(n) ? n : dflt;
   };
+  const cloudExtraction            = envBool("CLOUD_EXTRACTION", false);
   const enableNativeExtraction     = envBool("ENABLE_NATIVE_EXTRACTION", true);
   const enableDocling              = envBool("ENABLE_DOCLING", true);
   const enablePageLevelOcr         = envBool("ENABLE_PAGE_LEVEL_OCR", true);
@@ -220,7 +230,7 @@ export function loadAIConfig(): AIConfig {
     chatModelPath, embedModelDir, vectorDb, lancedbPath,
     vllmBaseUrl, vllmApiKey, vllmDefaultModel,
     llamaCppBaseUrl, llamaCppApiKey, llamaCppDefaultModel,
-    extractionStrategy, layoutSidecarUrl,
+    extractionStrategy, layoutSidecarUrl, cloudExtraction,
     enableGliner, glinerSidecarUrl, glinerModel, glinerThreshold, glinerLabels,
     enableNativeExtraction, enableDocling, enablePageLevelOcr,
     minNativeTextPerPage, minExtractionConfidence, requireReviewBelowConfidence,
