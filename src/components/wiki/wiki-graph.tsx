@@ -47,13 +47,20 @@ const KIND_LABEL: Record<GraphNodeKind, string> = {
   note: "Notes",
 };
 
-// Force simulation parameters
-const CHARGE_STRENGTH = -180;
-const LINK_DISTANCE = 70;
-const LINK_STRENGTH = 0.08;
-const CENTER_STRENGTH = 0.02;
+// Force simulation parameters. Tuned to spread dense graphs (many biomarkers
+// around a few high-degree report hubs) instead of piling them up.
+const CHARGE_STRENGTH = -420;   // stronger repulsion → more breathing room
+const LINK_DISTANCE = 95;       // longer edges → hubs sit further from leaves
+const LINK_STRENGTH = 0.06;
+const CENTER_STRENGTH = 0.03;
 const FRICTION = 0.85;
 const MAX_VELOCITY = 8;
+const NODE_PADDING = 7;         // min gap between node circles (collision)
+
+/** Rendered radius for a node of the given degree — must match the render below. */
+function radiusFor(degree: number): number {
+  return 5 + Math.min(8, Math.sqrt(degree) * 2);
+}
 
 export function WikiGraph({ graph }: Props) {
   const router = useRouter();
@@ -173,6 +180,30 @@ export function WikiGraph({ graph }: Props) {
           n.vx = Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, n.vx * FRICTION));
           n.vy = Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, n.vy * FRICTION));
           n.x += n.vx; n.y += n.vy;
+        }
+
+        // Collision: hard-separate overlapping circles so nodes never sit on
+        // top of each other (position-based, independent of alpha cooling).
+        for (let i = 0; i < nodes.length; i++) {
+          const a = nodes[i];
+          const ra = radiusFor(a.degree);
+          for (let j = i + 1; j < nodes.length; j++) {
+            const b = nodes[j];
+            const dx = b.x - a.x;
+            const dy = b.y - a.y;
+            const min = ra + radiusFor(b.degree) + NODE_PADDING;
+            let dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < min && dist > 0) {
+              const push = (min - dist) / 2;
+              const ux = dx / dist;
+              const uy = dy / dist;
+              if (dragging !== a.id) { a.x -= ux * push; a.y -= uy * push; }
+              if (dragging !== b.id) { b.x += ux * push; b.y += uy * push; }
+            } else if (dist === 0) {
+              // Exactly coincident — nudge apart deterministically.
+              a.x -= 0.5; b.x += 0.5;
+            }
+          }
         }
       }
 
