@@ -137,6 +137,13 @@ export async function cascadeDeleteUpload(userId: string, uploadId: string): Pro
 
   const report = upload.report;
 
+  // ── 0. Health alerts for this report ───────────────────────────────────────
+  // BiomarkerAlert has a plain reportId (no FK), so the Upload→Report cascade
+  // doesn't remove them — delete them explicitly or they linger in the bell.
+  if (report) {
+    await prisma.biomarkerAlert.deleteMany({ where: { userId, reportId: report.id } });
+  }
+
   // ── 1. Storage (uploads/ dir) ──────────────────────────────────────────────
   await storage.delete(upload.storagePath).catch(() => {});
 
