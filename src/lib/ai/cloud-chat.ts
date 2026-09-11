@@ -249,6 +249,15 @@ function toClaudeMessages(messages: ChatMessage[]) {
   return { system: system || undefined, messages: formatted };
 }
 
+// Claude 5-generation models removed the `temperature` parameter — sending it
+// returns 400 "temperature is deprecated for this model". Include it only for
+// models that still accept it.
+function claudeTemperature(model: string, options?: ChatOptions): { temperature?: number } {
+  if (options?.temperature === undefined) return {};
+  if (/claude-(opus|sonnet|haiku)-5|claude-5/i.test(model)) return {};
+  return { temperature: options.temperature };
+}
+
 async function claudeChat(
   apiKey: string,
   model: string,
@@ -266,7 +275,7 @@ async function claudeChat(
       .stream({
         model,
         max_tokens: 32768,
-        temperature: options?.temperature ?? undefined,
+        ...claudeTemperature(model, options),
         system,
         messages: formatted,
       })
@@ -295,7 +304,7 @@ async function* claudeStream(
   const stream = client.messages.stream({
     model,
     max_tokens: 32768,
-    temperature: options?.temperature ?? undefined,
+    ...claudeTemperature(model, options),
     system,
     messages: formatted,
   });
