@@ -28,7 +28,10 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 # Run as the built-in non-root node user.
-RUN mkdir -p /data/uploads && chown -R node:node /data /app
+# Create both mount points BEFORE the volumes attach so the named volumes
+# inherit node ownership (a fresh volume otherwise mounts root-owned → EPERM
+# when the non-root app writes uploads / vault pages).
+RUN mkdir -p /data/uploads /data/vault && chown -R node:node /data /app
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
