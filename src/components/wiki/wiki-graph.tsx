@@ -74,6 +74,9 @@ export function WikiGraph({ graph }: Props) {
   const [, forceRender] = useState(0);
   const simNodesRef = useRef<SimNode[]>([]);
   const simEdgesRef = useRef<SimEdge[]>([]);
+  const alphaRef = useRef(1);        // simulation "heat" — cools to 0 and settles
+  const rafRef = useRef(0);          // 0 = loop stopped
+  const tickRef = useRef<() => void>(() => {});
 
   // Resize observer
   useEffect(() => {
@@ -118,81 +121,84 @@ export function WikiGraph({ graph }: Props) {
     forceRender((v) => v + 1);
   }, [graph, dimensions]);
 
-  // Force simulation loop
+  // Force simulation loop. Cools to a stop (alpha → 0) so the graph SETTLES
+  // instead of jittering forever; reheat() restarts it on interaction.
+  const MIN_ALPHA = 0.02;
   useEffect(() => {
-    let raf = 0;
-    let alpha = 1;
     const tick = () => {
       const nodes = simNodesRef.current;
       const edges = simEdgesRef.current;
-      if (nodes.length === 0) {
-        raf = requestAnimationFrame(tick);
-        return;
-      }
-      const { width, height } = dimensions;
-      const cx = width / 2;
-      const cy = height / 2;
+      const alpha = alphaRef.current;
+      const dragging = draggingRef.current.id;
 
-      // Repulsion between every pair (O(n^2) — fine up to ~300 nodes)
-      for (let i = 0; i < nodes.length; i++) {
-        const a = nodes[i];
-        for (let j = i + 1; j < nodes.length; j++) {
-          const b = nodes[j];
-          const dx = b.x - a.x;
-          const dy = b.y - a.y;
-          const dist2 = dx * dx + dy * dy + 0.01;
-          const force = (CHARGE_STRENGTH * alpha) / dist2;
-          const dist = Math.sqrt(dist2);
-          const fx = (dx / dist) * force;
-          const fy = (dy / dist) * force;
-          a.vx -= fx;
-          a.vy -= fy;
-          b.vx += fx;
-          b.vy += fy;
+      if (nodes.length > 0) {
+        const { width, height } = dimensions;
+        const cx = width / 2;
+        const cy = height / 2;
+
+        // Repulsion between every pair (O(n^2) — fine up to ~300 nodes)
+        for (let i = 0; i < nodes.length; i++) {
+          const a = nodes[i];
+          for (let j = i + 1; j < nodes.length; j++) {
+            const b = nodes[j];
+            const dx = b.x - a.x;
+            const dy = b.y - a.y;
+            const dist2 = dx * dx + dy * dy + 0.01;
+            const force = (CHARGE_STRENGTH * alpha) / dist2;
+            const dist = Math.sqrt(dist2);
+            const fx = (dx / dist) * force;
+            const fy = (dy / dist) * force;
+            a.vx -= fx; a.vy -= fy; b.vx += fx; b.vy += fy;
+          }
+        }
+        // Link attraction
+        for (const edge of edges) {
+          const dx = edge.target.x - edge.source.x;
+          const dy = edge.target.y - edge.source.y;
+          const dist = Math.sqrt(dx * dx + dy * dy) + 0.01;
+          const delta = (dist - LINK_DISTANCE) * LINK_STRENGTH * alpha;
+          const fx = (dx / dist) * delta;
+          const fy = (dy / dist) * delta;
+          edge.source.vx += fx; edge.source.vy += fy;
+          edge.target.vx -= fx; edge.target.vy -= fy;
+        }
+        // Center gravity
+        for (const n of nodes) {
+          n.vx += (cx - n.x) * CENTER_STRENGTH * alpha;
+          n.vy += (cy - n.y) * CENTER_STRENGTH * alpha;
+        }
+        // Integrate
+        for (const n of nodes) {
+          if (dragging === n.id) { n.vx = 0; n.vy = 0; continue; }
+          n.vx = Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, n.vx * FRICTION));
+          n.vy = Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, n.vy * FRICTION));
+          n.x += n.vx; n.y += n.vy;
         }
       }
 
-      // Link attraction
-      for (const edge of edges) {
-        const dx = edge.target.x - edge.source.x;
-        const dy = edge.target.y - edge.source.y;
-        const dist = Math.sqrt(dx * dx + dy * dy) + 0.01;
-        const delta = (dist - LINK_DISTANCE) * LINK_STRENGTH * alpha;
-        const fx = (dx / dist) * delta;
-        const fy = (dy / dist) * delta;
-        edge.source.vx += fx;
-        edge.source.vy += fy;
-        edge.target.vx -= fx;
-        edge.target.vy -= fy;
-      }
-
-      // Center gravity
-      for (const n of nodes) {
-        n.vx += (cx - n.x) * CENTER_STRENGTH * alpha;
-        n.vy += (cy - n.y) * CENTER_STRENGTH * alpha;
-      }
-
-      // Integrate
-      for (const n of nodes) {
-        if (draggingRef.current.id === n.id) {
-          n.vx = 0;
-          n.vy = 0;
-          continue;
-        }
-        n.vx = Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, n.vx * FRICTION));
-        n.vy = Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, n.vy * FRICTION));
-        n.x += n.vx;
-        n.y += n.vy;
-      }
-
-      alpha *= 0.998; // cool down gradually
-      if (alpha < 0.002) alpha = 0.002;
+      alphaRef.current = alpha * 0.97; // cool faster so it settles quickly
       forceRender((v) => (v + 1) % 1_000_000);
-      raf = requestAnimationFrame(tick);
+
+      // Keep running while hot or while the user is dragging; otherwise freeze.
+      if (alphaRef.current > MIN_ALPHA || dragging) {
+        rafRef.current = requestAnimationFrame(tick);
+      } else {
+        for (const n of nodes) { n.vx = 0; n.vy = 0; } // stop residual drift
+        rafRef.current = 0; // settled — no more frames
+      }
     };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [dimensions]);
+    tickRef.current = tick;
+    alphaRef.current = 1;                       // heat up on (re)seed / resize
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [dimensions, graph]);
+
+  // Re-energize the (possibly settled) simulation after an interaction.
+  const reheat = useCallback(() => {
+    alphaRef.current = Math.max(alphaRef.current, 0.5);
+    if (!rafRef.current) rafRef.current = requestAnimationFrame(tickRef.current);
+  }, []);
 
   // Pan / zoom handlers
   const onWheel = useCallback((e: React.WheelEvent) => {
@@ -251,6 +257,7 @@ export function WikiGraph({ graph }: Props) {
       else next.add(kind);
       return next;
     });
+    reheat(); // let the layout re-settle after the set changes
   };
 
   const visibleNodeIds = useMemo(() => {
@@ -416,6 +423,7 @@ export function WikiGraph({ graph }: Props) {
                         e.stopPropagation();
                         movedRef.current = false;
                         draggingRef.current = { id: n.id, offsetX: 0, offsetY: 0 };
+                        reheat(); // wake the sim so neighbors follow the drag
                       }}
                       onClick={(e) => {
                         e.stopPropagation();
