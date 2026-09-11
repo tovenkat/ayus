@@ -29,11 +29,15 @@ export default async function TestDetailPage({ params }: Params) {
   const { name: rawName } = await params;
   const name = decodeURIComponent(rawName);
 
-  // Case-insensitive lookup so links from anywhere work
+  // Case-insensitive lookup so links from anywhere work — match the raw
+  // normalized name OR the canonical name (organ-view links pass canonical).
   const rows = await prisma.testResult.findMany({
     where: {
       userId,
-      normalizedName: { equals: name, mode: "insensitive" },
+      OR: [
+        { normalizedName: { equals: name, mode: "insensitive" } },
+        { canonical: { name: { equals: name, mode: "insensitive" } } },
+      ],
     },
     orderBy: { createdAt: "desc" },
     include: {
