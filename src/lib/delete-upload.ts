@@ -216,25 +216,27 @@ export async function cascadeDeleteUpload(userId: string, uploadId: string): Pro
     }
   }
 
-  // ── 4. If this upload produced a non-lab Document (markdown, image), clear it ─
-  if (!report) {
-    const doc = await prisma.document.findUnique({
-      where: { uploadId },
-      select: { id: true, slug: true, chunks: { select: { id: true } } },
-    });
-    if (doc) {
-      const chunkIds = doc.chunks.map((c) => c.id);
-      if (chunkIds.length > 0) {
-        try {
-          const { getVectorStore } = await import("@/lib/ai/vector-store");
-          const store = await getVectorStore();
-          if (store) await store.delete("wiki_chunks", chunkIds);
-        } catch (err) {
-          console.warn(`[delete-upload] vector delete failed:`, err instanceof Error ? err.message : err);
-        }
+  // ── 4. The Document ingestFile created for the uploaded file itself ─────────
+  // Every upload (lab report OR plain doc) gets a Document keyed by uploadId —
+  // the raw file as a wiki page (slug from the filename, e.g. "ch-venkatesh-2-…").
+  // This runs unconditionally: for a lab report it's a SEPARATE page from the
+  // lab-report summary, so skipping it when a report exists orphaned it.
+  const uploadDoc = await prisma.document.findUnique({
+    where: { uploadId },
+    select: { id: true, chunks: { select: { id: true } } },
+  });
+  if (uploadDoc) {
+    const chunkIds = uploadDoc.chunks.map((c) => c.id);
+    if (chunkIds.length > 0) {
+      try {
+        const { getVectorStore } = await import("@/lib/ai/vector-store");
+        const store = await getVectorStore();
+        if (store) await store.delete("wiki_chunks", chunkIds);
+      } catch (err) {
+        console.warn(`[delete-upload] vector delete failed:`, err instanceof Error ? err.message : err);
       }
-      await prisma.document.deleteMany({ where: { id: doc.id } });
     }
+    await prisma.document.deleteMany({ where: { id: uploadDoc.id } });
   }
 
   // ── 5. Delete the Upload row — Prisma cascade handles Report + TestResult + Jobs ─
