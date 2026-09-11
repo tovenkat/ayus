@@ -69,10 +69,17 @@ function classifyTrend(
 }
 
 async function buildBiomarkerHistory(userId: string): Promise<BiomarkerReading[]> {
+  // Use the LATEST reading per biomarker regardless of age — a report uploaded
+  // for an old test date (e.g. a 2022 lab) is still the patient's most recent
+  // data and must not be hidden by a recency window. Order by report date so
+  // the grouping below picks the genuinely latest reading.
   const results = await prisma.testResult.findMany({
-    where: { userId, report: { sampleCollectedOn: { gte: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000) } } },
-    orderBy: [{ createdAt: "desc" }],
-    take: 200,
+    where: { userId },
+    orderBy: [
+      { report: { sampleCollectedOn: "desc" } },
+      { createdAt: "desc" },
+    ],
+    take: 500,
     include: { report: { select: { sampleCollectedOn: true, createdAt: true } } },
   });
 
