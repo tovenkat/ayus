@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import {
-  Stethoscope, Pill, UtensilsCrossed, Calendar,
+  Stethoscope, Pill, UtensilsCrossed, Dumbbell, Calendar,
   Upload, Clock, Sun, Sunset, Moon, CloudSun, ArrowRight, Heart,
 } from "lucide-react";
 
@@ -99,12 +99,16 @@ async function LabResultsSection({
 async function HealthSections() {
   const userId = await requireAuth();
 
-  const [activeMeds, todayDiet, recentNotes, upcomingFollowups] = await Promise.all([
+  const [activeMeds, todayDiet, todayExercise, recentNotes, upcomingFollowups] = await Promise.all([
     prisma.medication.findMany({
       where: { userId, active: true },
       orderBy: { name: "asc" },
     }),
     prisma.dietSchedule.findMany({
+      where: { userId, active: true },
+      orderBy: { time: "asc" },
+    }),
+    prisma.exerciseSchedule.findMany({
       where: { userId, active: true },
       orderBy: { time: "asc" },
     }),
@@ -124,6 +128,9 @@ async function HealthSections() {
   const today = new Date().getDay();
   const todayMeals = todayDiet.filter(
     (d) => d.daysOfWeek.length === 0 || d.daysOfWeek.includes(today)
+  );
+  const todayWorkouts = todayExercise.filter(
+    (e) => e.daysOfWeek.length === 0 || e.daysOfWeek.includes(today)
   );
 
   return (
@@ -238,6 +245,41 @@ async function HealthSections() {
               </div>
             ) : (
               <EmptyCard label="No meals scheduled today" href="/diet" action="Plan a meal" />
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Today's Workout */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Dumbbell className="size-4 text-indigo-500" />
+              Today&apos;s Workout
+            </CardTitle>
+            <Link href="/exercise" className="text-xs text-primary hover:underline flex items-center gap-1">
+              Plan <ArrowRight className="size-3" />
+            </Link>
+          </CardHeader>
+          <CardContent>
+            {todayWorkouts.length > 0 ? (
+              <div className="space-y-2.5">
+                {todayWorkouts.map((w) => (
+                  <div key={w.id} className="flex items-start justify-between text-sm gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="text-[10px] capitalize">{w.exerciseType.toLowerCase()}</Badge>
+                        <span className="text-xs text-muted-foreground">{w.time}</span>
+                      </div>
+                      <p className="text-xs mt-0.5 truncate">{w.name}</p>
+                    </div>
+                    {w.durationMin ? (
+                      <span className="text-xs text-muted-foreground shrink-0">{w.durationMin} min</span>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyCard label="Rest day — or plan a workout" href="/exercise" action="Generate my week" />
             )}
           </CardContent>
         </Card>

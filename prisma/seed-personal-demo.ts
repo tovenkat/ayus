@@ -330,6 +330,21 @@ async function seedMeals(userId: string) {
   return meals.length;
 }
 
+async function seedExercise(userId: string) {
+  await prisma.exerciseSchedule.deleteMany({ where: { userId } });
+  // daysOfWeek: 0=Sun … 6=Sat. A prediabetic / stage-1 HTN friendly week:
+  // brisk cardio most days + 2 strength sessions + mobility, with a rest day.
+  const sessions: Array<Parameters<typeof prisma.exerciseSchedule.create>[0]["data"]> = [
+    { userId, exerciseType: "WALK", name: "Brisk morning walk", time: "06:30", durationMin: 30, intensity: "moderate", targetAreas: ["cardio", "legs"], daysOfWeek: [1, 2, 4, 5], notes: "Aim for ~100 steps/min. Helps post-meal glucose control.", active: true },
+    { userId, exerciseType: "STRENGTH", name: "Full-body resistance (bands + bodyweight)", time: "18:00", durationMin: 35, intensity: "moderate", targetAreas: ["full body"], daysOfWeek: [1, 4], notes: "Squats, rows, push-ups, glute bridges. 2–3 sets each.", active: true },
+    { userId, exerciseType: "CARDIO", name: "Cycling / stationary bike", time: "07:00", durationMin: 40, intensity: "moderate", targetAreas: ["cardio", "legs"], daysOfWeek: [3], notes: "Zone-2 effort — can hold a conversation.", active: true },
+    { userId, exerciseType: "YOGA", name: "Yoga & mobility flow", time: "07:30", durationMin: 25, intensity: "low", targetAreas: ["flexibility", "core", "back"], daysOfWeek: [6], notes: "Sun salutations + gentle stretching. Good for BP.", active: true },
+    { userId, exerciseType: "REST", name: "Active rest — light stroll only", time: "08:00", durationMin: null, intensity: "low", targetAreas: [], daysOfWeek: [0], notes: "Recovery day. Keep it easy.", active: true },
+  ];
+  for (const data of sessions) await prisma.exerciseSchedule.create({ data });
+  return sessions.length;
+}
+
 async function seedVisits(userId: string) {
   // Remove prior self-recorded demo visits (no org attribution). Prescriptions cascade.
   await prisma.doctorNote.deleteMany({ where: { userId, organizationId: null } });
@@ -418,13 +433,14 @@ async function main() {
   const notes = await seedHealthNotes(user.id);
   const meds = await seedMedications(user.id);
   const meals = await seedMeals(user.id);
+  const workouts = await seedExercise(user.id);
   const visits = await seedVisits(user.id);
   const ai = await enableInternetLlm(user.id);
 
   console.log(
     `[personal-demo] ${user.name ?? PHONE}: ${reports} reports, ${results} results, ` +
     `${wikiPages} wiki pages + ${notes} personal health notes, ${meds} medications, ${meals} meals, ` +
-    `${visits} doctor visits (1 upcoming follow-up); AI: ${ai}. ` +
+    `${workouts} workouts, ${visits} doctor visits (1 upcoming follow-up); AI: ${ai}. ` +
     `Log in as ${PHONE} → /wiki (Health Notes) · /wiki/graph (Graph).`,
   );
 }

@@ -169,6 +169,7 @@ model User {
   doctorNotes    DoctorNote[]
   medications    Medication[]
   dietSchedules  DietSchedule[]
+  exerciseSchedules ExerciseSchedule[]
   reports        Report[]
   testResults    TestResult[]
   clinicalReports ClinicalReport[]
@@ -573,6 +574,41 @@ model DietSchedule {
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, active])
+}
+
+// ─── Health: Exercise Schedule ──────────────────────────────────
+
+enum ExerciseType {
+  CARDIO
+  STRENGTH
+  FLEXIBILITY
+  BALANCE
+  YOGA
+  WALK
+  SPORT
+  REST
+}
+
+model ExerciseSchedule {
+  id           String       @id @default(cuid())
+  userId       String
+  exerciseType ExerciseType
+  name         String // "Brisk walk", "Upper-body strength"
+  time         String // "07:00"
+  durationMin  Int?
+  intensity    String? // "low" | "moderate" | "vigorous"
+  targetAreas  String[] // ["legs", "core", "cardio"]
+  daysOfWeek   Int[] // 0=Sun..6=Sat, empty=daily
+  notes        String?
+  active       Boolean      @default(true)
+  isFavorite   Boolean      @default(false)
+  hidden       Boolean      @default(false)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

@@ -45,6 +45,7 @@
     "@anthropic-ai/sdk": "^0.100.1",
     "@auth/prisma-adapter": "^2.11.2",
     "@base-ui/react": "^1.4.0",
+    "@google/genai": "^2.22.0",
     "@google/generative-ai": "^0.24.1",
     "@hookform/resolvers": "^5.2.2",
     "@lancedb/lancedb": "^0.27.2",

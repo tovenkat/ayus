@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Upload, BookOpen, Search, MessageSquare, MessageSquarePlus,
-  Tags, Settings, Stethoscope, Pill, UtensilsCrossed, FileText,
+  Tags, Settings, Stethoscope, Pill, UtensilsCrossed, Dumbbell, FileText,
   ClipboardList, Siren, Network, Users, ClipboardCheck, Building2,
   BedDouble, ScrollText, ShieldCheck, ActivitySquare,
 } from "lucide-react";
@@ -58,6 +58,7 @@ const NAV_BY_KIND: Record<AccountKind, NavGroup[]> = {
       { title: "Emergency Card",  href: "/emergency",    icon: Siren },
       { title: "Medications",     href: "/medications",  icon: Pill },
       { title: "Diet Schedule",   href: "/diet",         icon: UtensilsCrossed },
+      { title: "Exercise Plan",   href: "/exercise",     icon: Dumbbell },
     ] },
     { label: "Notes & Docs", items: [
       { title: "Health Notes",  href: "/wiki",       icon: BookOpen },
