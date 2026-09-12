@@ -337,10 +337,16 @@ export async function createReportFromExtraction(
   }
 
   // Denormalize the LOINC code onto each row (from the resolved canonical).
-  const validatedWithLoinc = validated.map((v) => ({
-    ...v,
-    loincNum: v.canonicalTestId ? (loincByCanonical.get(v.canonicalTestId) ?? null) : null,
-  }));
+  // Strip the transient `_unitInferred` marker — it's used above to append a
+  // warning but is not a TestResult column, so Prisma rejects it on create.
+  const validatedWithLoinc = validated.map((v) => {
+    const { _unitInferred, ...row } = v as typeof v & { _unitInferred?: boolean };
+    void _unitInferred;
+    return {
+      ...row,
+      loincNum: row.canonicalTestId ? (loincByCanonical.get(row.canonicalTestId) ?? null) : null,
+    };
+  });
 
   const totalWarnings = validated.reduce((n, r) => n + r.warnings.length, 0);
 
