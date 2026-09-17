@@ -12,14 +12,18 @@ import { prisma } from "@/lib/prisma";
 import { getAccountKind, type AccountKind } from "@/lib/account-kind";
 import type { ChatMessage } from "@/lib/ai/types";
 
-const DEFAULT_SYSTEM_PROMPT = `You are a helpful knowledge assistant. You answer questions using the provided document context from the user's personal wiki.
+// Records-OFF prompt for the personal app: the user asked a general question
+// without attaching their records, so answer from established medical/nutrition
+// knowledge. This is NOT a wiki-only bot — it must always give a real answer and
+// never say "there's no information in your documents" (there are none by design).
+const GENERAL_HEALTH_PROMPT = `You are a knowledgeable, friendly health assistant. The user has asked a general question WITHOUT sharing their personal health records for this message, so answer from established medical, nutrition, and lifestyle knowledge.
 
 RULES:
-1. Answer based on the provided context. If the context doesn't contain relevant information, say so.
-2. When citing information, mention which document it comes from (e.g., "According to your note 'Document Title'...").
-3. Be concise and direct.
-4. If asked about connections between topics, look for relationships across the provided documents.
-5. Maintain the user's terminology and style.`;
+1. Always give a genuinely useful answer from general knowledge. NEVER say "there's no information in your documents" or "I don't have access to your records" — no records were expected for this question.
+2. For "how do I improve / raise / lower / what should I eat for X" questions, give practical, specific guidance: common dietary sources, foods to favor or limit, and lifestyle steps.
+3. Understand Indian lab formats, common medical abbreviations, Indian reference ranges and foods.
+4. Be concise and direct; use bullet points for lists.
+5. When you give diet/lifestyle guidance, close with one short line that it's educational and their doctor or dietitian should guide changes. Never diagnose.`;
 
 const HEALTH_SYSTEM_PROMPT = `You are the user's personal health assistant. You have direct access to their current biomarkers, active medications, diet schedule, and last doctor visit through the <health_snapshot> block provided below. You also receive relevant document chunks from their wiki for deeper context.
 
@@ -63,9 +67,10 @@ function systemPromptFor(kind: AccountKind, healthMode?: boolean): string {
     case "unknown":
     default:
       // This is a personal health app — the assistant is a health assistant by
-      // default (with the live snapshot), not a bare wiki-search bot. healthMode
-      // is retained for callers that want the plain document-QA prompt.
-      return healthMode === false ? DEFAULT_SYSTEM_PROMPT : HEALTH_SYSTEM_PROMPT;
+      // default (with the live snapshot + records). healthMode === false means
+      // "don't use my records" → a general health assistant, still helpful and
+      // never a dead-end wiki bot.
+      return healthMode === false ? GENERAL_HEALTH_PROMPT : HEALTH_SYSTEM_PROMPT;
   }
 }
 
@@ -116,14 +121,19 @@ export async function POST(req: Request) {
     // ── Resolve account kind so the agent adapts (personal / lab / doctor) ─
     const accountKind = await getAccountKind(userId);
 
-    // The personal chat is a health assistant by default (snapshot on) unless
-    // the caller explicitly asked for plain document-QA (healthMode === false).
-    const wantSnapshot =
-      healthMode !== false && (accountKind === "personal" || accountKind === "unknown");
+    // The personal chat is a health assistant by default (snapshot + records on)
+    // unless the caller explicitly turned records OFF (healthMode === false),
+    // which asks a purely general question with no personal data attached.
+    const isPersonal = accountKind === "personal" || accountKind === "unknown";
+    const useRecords = healthMode !== false;
+    const wantSnapshot = useRecords && isPersonal;
+    // For personal accounts, "records off" also skips wiki retrieval so no
+    // personal chunks or citations leak in. Lab/doctor always use org context.
+    const wantContext = isPersonal ? useRecords : true;
 
     // ── Retrieve context (RAG chunks + optional structured snapshot) ──────
     const [context, snapshot] = await Promise.all([
-      retrieveContext(userId, message),
+      wantContext ? retrieveContext(userId, message) : Promise.resolve({ chunks: [], contextText: "" }),
       wantSnapshot ? buildHealthSnapshot(userId) : Promise.resolve(""),
     ]);
 
@@ -133,7 +143,9 @@ export async function POST(req: Request) {
 
     const contextBlock = context.contextText
       ? `\n\nHere are relevant chunks from the user's wiki:\n\n${context.contextText}`
-      : "\n\nNo matching wiki chunks were retrieved for this query.";
+      : wantContext
+        ? "\n\nNo matching wiki chunks were retrieved for this query — answer from the health snapshot and your general knowledge."
+        : "";
 
     const snapshotBlock = snapshot ? `\n\n${snapshot}` : "";
 

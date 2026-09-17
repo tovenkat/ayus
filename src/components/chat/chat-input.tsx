@@ -18,7 +18,10 @@ interface ChatInputProps {
 
 export function ChatInput({ onSend, disabled }: ChatInputProps) {
   const [input, setInput] = useState("");
-  const [useRecords, setUseRecords] = useState(false);
+  // Default ON: this is a personal health app, so the assistant should use the
+  // user's live snapshot + records by default. Turning it OFF asks a purely
+  // general health question with no personal data attached.
+  const [useRecords, setUseRecords] = useState(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSubmit = useCallback(() => {
