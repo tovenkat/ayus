@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAuth } from "@/lib/auth-helpers";
+import { checkPatientAccess } from "@/lib/patient-roster";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +10,10 @@ import { ArrowLeft, TrendingUp, TrendingDown, Minus, FileText, BookOpen } from "
 import { TestTrendChart } from "@/components/tests/test-trend-chart";
 import { toSlug } from "@/lib/ingestion/parsers/markdown";
 
-type Params = { params: Promise<{ name: string }> };
+type Params = {
+  params: Promise<{ name: string }>;
+  searchParams: Promise<{ patient?: string }>;
+};
 
 export async function generateMetadata({ params }: Params) {
   const { name } = await params;
@@ -24,16 +28,31 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 }
 
-export default async function TestDetailPage({ params }: Params) {
+export default async function TestDetailPage({ params, searchParams }: Params) {
   const userId = await requireAuth();
   const { name: rawName } = await params;
+  const { patient: patientParam } = await searchParams;
   const name = decodeURIComponent(rawName);
+
+  // Resolve whose results to show. Default: the logged-in user. When a
+  // `?patient=<id>` is passed (roster accounts drilling into a patient's
+  // dashboard), scope to that patient — but only if access is granted.
+  // Otherwise this page would query the lab/doctor's own (empty) results and
+  // 404 on every biomarker link from a patient dashboard.
+  let targetUserId = userId;
+  let patientId: string | null = null;
+  if (patientParam && patientParam !== userId) {
+    const gate = await checkPatientAccess(userId, patientParam);
+    if (!gate.ok) notFound();
+    targetUserId = patientParam;
+    patientId = patientParam;
+  }
 
   // Case-insensitive lookup so links from anywhere work — match the raw
   // normalized name OR the canonical name (organ-view links pass canonical).
   const rows = await prisma.testResult.findMany({
     where: {
-      userId,
+      userId: targetUserId,
       OR: [
         { normalizedName: { equals: name, mode: "insensitive" } },
         { canonical: { name: { equals: name, mode: "insensitive" } } },
@@ -90,9 +109,9 @@ export default async function TestDetailPage({ params }: Params) {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="flex items-center gap-2">
-        <Link href="/dashboard">
+        <Link href={patientId ? `/patients/${patientId}` : "/dashboard"}>
           <Button variant="ghost" size="sm">
-            <ArrowLeft className="mr-1 size-4" /> Dashboard
+            <ArrowLeft className="mr-1 size-4" /> {patientId ? "Patient" : "Dashboard"}
           </Button>
         </Link>
       </div>
@@ -231,7 +250,9 @@ export default async function TestDetailPage({ params }: Params) {
         </CardContent>
       </Card>
 
-      {/* Link to wiki entity page */}
+      {/* Link to wiki entity page — only for the user's own data (the wiki is
+          per-user; a roster viewer has no wiki page for the patient). */}
+      {!patientId && (
       <Link href={`/wiki/${wikiSlug}`}>
         <Card className="hover:bg-muted/30 transition cursor-pointer">
           <CardContent className="py-3 flex items-center gap-3">
@@ -244,6 +265,7 @@ export default async function TestDetailPage({ params }: Params) {
           </CardContent>
         </Card>
       </Link>
+      )}
     </div>
   );
 }

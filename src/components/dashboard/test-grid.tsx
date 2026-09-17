@@ -31,6 +31,8 @@ interface TestGridProps {
   tests: TestSummary[];
   categoryFilter?: CategoryFilter;
   onClearFilter?: () => void;
+  /** When set (roster patient view), biomarker links scope to this patient. */
+  patientId?: string;
 }
 
 function applyFilter(tests: TestSummary[], filter: CategoryFilter): TestSummary[] {
@@ -41,8 +43,9 @@ function applyFilter(tests: TestSummary[], filter: CategoryFilter): TestSummary[
   });
 }
 
-export function TestGrid({ tests, categoryFilter, onClearFilter }: TestGridProps) {
+export function TestGrid({ tests, categoryFilter, onClearFilter, patientId }: TestGridProps) {
   const filtered = applyFilter(tests, categoryFilter ?? null);
+  const patientQuery = patientId ? `?patient=${encodeURIComponent(patientId)}` : "";
 
   return (
     <div className="space-y-3">
@@ -71,7 +74,7 @@ export function TestGrid({ tests, categoryFilter, onClearFilter }: TestGridProps
             return (
               <Link
                 key={test.normalizedName}
-                href={`/tests/${encodeURIComponent(test.normalizedName)}`}
+                href={`/tests/${encodeURIComponent(test.normalizedName)}${patientQuery}`}
               >
                 <Card className="transition-shadow hover:shadow-md cursor-pointer">
                   <CardHeader className="pb-2">

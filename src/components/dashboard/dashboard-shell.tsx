@@ -111,7 +111,9 @@ export function DashboardShell({ initialData, organRegions = [], patientId }: Da
               {/* Pie (status breakdown) next to the interactive organ anatomy */}
               <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
                 <HealthOverview summary={data.summary} selected={categoryFilter} onSelect={setCategoryFilter} />
-                <OrganAnatomy regions={organRegions} />
+                {/* In a patient view, don't link the title to the viewer's own
+                    /dashboard/organs (which shows THEIR data, not the patient's). */}
+                <OrganAnatomy regions={organRegions} href={patientId ? null : "/dashboard/organs"} />
               </div>
               <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_300px]">
                 <StatusAreaChart data={data.statusTimeline} />
@@ -132,6 +134,7 @@ export function DashboardShell({ initialData, organRegions = [], patientId }: Da
             tests={data.tests}
             categoryFilter={categoryFilter}
             onClearFilter={() => setCategoryFilter(null)}
+            patientId={patientId}
           />
         </>
       )}
