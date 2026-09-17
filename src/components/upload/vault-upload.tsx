@@ -218,7 +218,7 @@ const FILE_ICONS: Record<string, typeof FileText> = {
   "application/zip": FileArchive,
 };
 
-export function VaultUpload() {
+export function VaultUpload({ patientId }: { patientId?: string } = {}) {
   const router = useRouter();
   const [state, setState] = useState<UploadState>("idle");
   const [dragOver, setDragOver] = useState(false);
@@ -290,6 +290,8 @@ export function VaultUpload() {
 
     const formData = new FormData();
     formData.append("uploadType", uploadType);
+    // Roster upload-on-behalf-of: scope the report to a consented patient.
+    if (patientId) formData.append("patientId", patientId);
     for (const file of files) {
       formData.append("files", file);
     }
@@ -353,7 +355,7 @@ export function VaultUpload() {
       setState("error");
       toast.error(msg);
     }
-  }, [uploadType, router]);
+  }, [uploadType, patientId, router]);
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {

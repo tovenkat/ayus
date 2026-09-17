@@ -89,6 +89,7 @@ const NAV_BY_KIND: Record<AccountKind, NavGroup[]> = {
   doctor: [
     { label: "Main", items: [
       ...COMMON_MAIN,
+      { title: "Upload", href: "/upload", icon: Upload },
       { title: "Search", href: "/search", icon: Search },
     ] },
     { label: "Patients", items: [
@@ -106,6 +107,7 @@ const NAV_BY_KIND: Record<AccountKind, NavGroup[]> = {
   hospital: [
     { label: "Main", items: [
       ...COMMON_MAIN,
+      { title: "Upload", href: "/upload", icon: Upload },
       { title: "Search", href: "/search", icon: Search },
     ] },
     { label: "Patients", items: [
