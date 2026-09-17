@@ -1,17 +1,17 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import Link from "next/link";
 import ReactMarkdown from "react-markdown";
-import { Bot, User } from "lucide-react";
+import { Bot, User, FileText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
+// Document citation — matches what /api/chat streams (one per source wiki doc).
 export interface Citation {
-  testName: string;
-  date: string;
-  value: string;
-  unit: string | null;
-  isOutOfRange: boolean;
+  documentId: string;
+  slug: string;
+  title: string;
 }
 
 export interface ChatMessage {
@@ -27,14 +27,6 @@ interface ChatMessagesProps {
   streamingContent: string;
   isStreaming: boolean;
   disclaimer: string | null;
-}
-
-function formatCitationDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
 }
 
 function AssistantMessage({
@@ -56,15 +48,15 @@ function AssistantMessage({
 
         {message.citations && message.citations.length > 0 && (
           <div className="flex flex-wrap gap-1.5 pt-1">
-            {message.citations.map((c, i) => (
-              <Badge
-                key={i}
-                variant={c.isOutOfRange ? "destructive" : "secondary"}
-                className="text-xs"
-              >
-                {c.testName}: {c.value}
-                {c.unit ? ` ${c.unit}` : ""} on {formatCitationDate(c.date)}
-              </Badge>
+            {Array.from(
+              new Map(message.citations.map((c) => [c.documentId, c])).values(),
+            ).map((c) => (
+              <Link key={c.documentId} href={`/wiki/${c.slug}`}>
+                <Badge variant="outline" className="text-[10px] cursor-pointer hover:bg-background/50">
+                  <FileText className="size-2.5 mr-1" />
+                  {c.title}
+                </Badge>
+              </Link>
             ))}
           </div>
         )}
