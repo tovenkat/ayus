@@ -52,7 +52,7 @@ export function UploadForPatient({ patientId }: { patientId: string }) {
       <input
         ref={inputRef}
         type="file"
-        accept=".pdf,.jpg,.jpeg,.png"
+        accept=".pdf,.docx,.jpg,.jpeg,.png"
         multiple
         hidden
         onChange={(e) => onFiles(e.target.files)}

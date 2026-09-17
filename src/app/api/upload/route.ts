@@ -34,8 +34,11 @@ import type { UploadType } from "@prisma/client";
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB per file
 const MAX_ZIP_SIZE = 100 * 1024 * 1024; // 100 MB for zips
 
+const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
 const ALLOWED_TYPES: Record<string, string> = {
   "application/pdf": ".pdf",
+  [DOCX_MIME]: ".docx",
   "text/markdown": ".md",
   "text/plain": ".txt",
   "text/csv": ".csv",
@@ -49,6 +52,7 @@ const ALLOWED_TYPES: Record<string, string> = {
 // Also match by extension for browsers that send wrong MIME
 const EXT_MIMES: Record<string, string> = {
   ".pdf": "application/pdf",
+  ".docx": DOCX_MIME,
   ".md": "text/markdown",
   ".txt": "text/plain",
   ".csv": "text/csv",
@@ -65,8 +69,11 @@ function getExt(filename: string): string {
 }
 
 function resolveMime(file: File): string {
-  if (ALLOWED_TYPES[file.type]) return file.type;
   const ext = getExt(file.name);
+  // A .docx is a ZIP under the hood, so some browsers report application/zip.
+  // Pin by extension so it's never misrouted into the ZIP-expansion path.
+  if (ext === ".docx") return DOCX_MIME;
+  if (ALLOWED_TYPES[file.type]) return file.type;
   return EXT_MIMES[ext] ?? file.type;
 }
 

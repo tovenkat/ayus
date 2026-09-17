@@ -25,6 +25,7 @@ import { prisma } from "@/lib/prisma";
 import type { Upload } from "@prisma/client";
 import { storage } from "@/lib/storage";
 import { extractPdfTextByPage } from "@/lib/ingestion/parsers/pdf";
+import { extractDocxText, DOCX_MIME } from "@/lib/ingestion/parsers/docx";
 import { assessDocumentQuality, summarizeQuality } from "@/lib/extraction/quality";
 import { isSidecarReachable, extractTextViaSidecar } from "@/lib/extraction/layout-strategy";
 import { ingestFile, resolveWikilinks, embedPendingChunks } from "@/lib/ingestion/pipeline";
@@ -61,34 +62,45 @@ export async function runExtractionForUpload(
 
   const mime = upload.mimeType;
 
-  // ── PDF ────────────────────────────────────────────────────────────────
-  if (mime === "application/pdf") {
-    const pageResult = await extractPdfTextByPage(buffer);
-    let pdfText = pageResult.total;
+  // ── PDF / DOCX (text-first extraction) ───────────────────────────────────
+  if (mime === "application/pdf" || mime === DOCX_MIME) {
+    let pdfText: string;
 
-    const quality = assessDocumentQuality(pageResult.pages);
-    await report(8, `${quality.numPages}p · mean quality ${quality.meanScore.toFixed(2)}`);
-    console.log(`[extract-runner] "${upload.originalName}" quality: ${summarizeQuality(quality)} → ${quality.needsOcr ? "OCR" : "digital"}`);
+    if (mime === DOCX_MIME) {
+      // Word / Google Docs export — mammoth pulls plain text (incl. tables).
+      pdfText = await extractDocxText(buffer);
+      await report(8, `read ${pdfText.length.toLocaleString()} chars from document`);
+      if (pdfText.length < 10) {
+        throw new Error("DOCX has no extractable text (empty or image-only document)");
+      }
+    } else {
+      const pageResult = await extractPdfTextByPage(buffer);
+      pdfText = pageResult.total;
 
-    if (quality.needsOcr) {
-      const sidecarUp = await isSidecarReachable();
-      if (sidecarUp) {
-        await report(10, `${quality.reason} — running Docling OCR`);
-        try {
-          const ocrText = await extractTextViaSidecar(buffer, mime, upload.originalName);
-          if (ocrText.length > pdfText.length) {
-            pdfText = ocrText;
-            await report(14, `Docling OCR recovered ${pdfText.length.toLocaleString()} chars`);
+      const quality = assessDocumentQuality(pageResult.pages);
+      await report(8, `${quality.numPages}p · mean quality ${quality.meanScore.toFixed(2)}`);
+      console.log(`[extract-runner] "${upload.originalName}" quality: ${summarizeQuality(quality)} → ${quality.needsOcr ? "OCR" : "digital"}`);
+
+      if (quality.needsOcr) {
+        const sidecarUp = await isSidecarReachable();
+        if (sidecarUp) {
+          await report(10, `${quality.reason} — running Docling OCR`);
+          try {
+            const ocrText = await extractTextViaSidecar(buffer, mime, upload.originalName);
+            if (ocrText.length > pdfText.length) {
+              pdfText = ocrText;
+              await report(14, `Docling OCR recovered ${pdfText.length.toLocaleString()} chars`);
+            }
+          } catch (ocrErr) {
+            console.warn(`[extract-runner] Docling OCR failed for "${upload.originalName}":`, ocrErr instanceof Error ? ocrErr.message : ocrErr);
+            warnings.push(`OCR failed: ${ocrErr instanceof Error ? ocrErr.message : "unknown error"}`);
           }
-        } catch (ocrErr) {
-          console.warn(`[extract-runner] Docling OCR failed for "${upload.originalName}":`, ocrErr instanceof Error ? ocrErr.message : ocrErr);
-          warnings.push(`OCR failed: ${ocrErr instanceof Error ? ocrErr.message : "unknown error"}`);
         }
       }
-    }
 
-    if (pdfText.length < 10) {
-      throw new Error("PDF has no extractable text (scanned image, no OCR available)");
+      if (pdfText.length < 10) {
+        throw new Error("PDF has no extractable text (scanned image, no OCR available)");
+      }
     }
 
     // Ingest as wiki doc (chunks, tags, wikilinks).

@@ -39,7 +39,7 @@ type UploadResult = {
   errors?: string[];
 };
 
-const ACCEPT = ".pdf,.md,.txt,.csv,.json,.jpg,.jpeg,.png,.zip";
+const ACCEPT = ".pdf,.docx,.md,.txt,.csv,.json,.jpg,.jpeg,.png,.zip";
 
 type JobSnapshot = {
   id: string;
@@ -209,6 +209,7 @@ function stageIndexFor(message: string): number {
 
 const FILE_ICONS: Record<string, typeof FileText> = {
   "application/pdf": FileText,
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": FileText,
   "text/markdown": FileText,
   "text/plain": FileText,
   "text/csv": File,
