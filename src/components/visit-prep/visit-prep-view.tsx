@@ -60,15 +60,30 @@ function downloadAsPdf(patientName: string) {
   setTimeout(restore, 2000);
 }
 
-export function VisitPrepView({ patientName }: { patientName: string }) {
+export function VisitPrepView({
+  patientName,
+  patientId,
+  showShare = true,
+}: {
+  patientName: string;
+  /** Roster (doctor/hospital) view: generate prep for this consented patient. */
+  patientId?: string;
+  /** Sharing is a personal action — hidden in the roster patient view. */
+  showShare?: boolean;
+}) {
   const [loading, setLoading] = useState(false);
   const [prep, setPrep] = useState<VisitPrep | null>(null);
+  const forPatient = !!patientId;
 
   async function generate() {
     setLoading(true);
     setPrep(null);
     try {
-      const res = await fetch("/api/visit-prep", { method: "POST" });
+      const res = await fetch("/api/visit-prep", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patientId ? { patientId } : {}),
+      });
       const data = await res.json();
       if (!res.ok) {
         toast.error(data.error ?? "Couldn't generate visit prep");
@@ -90,10 +105,13 @@ export function VisitPrepView({ patientName }: { patientName: string }) {
             <Stethoscope className="size-6" />
           </div>
           <div>
-            <h2 className="font-heading text-lg font-semibold">Prep for your next doctor visit</h2>
+            <h2 className="font-heading text-lg font-semibold">
+              {forPatient ? `Prep for ${patientName}'s visit` : "Prep for your next doctor visit"}
+            </h2>
             <p className="text-sm text-muted-foreground max-w-md mx-auto pt-1">
-              One-page summary built from your latest lab trends, active medications, diet, and last visit.
-              Print it and walk in ready.
+              One-page summary built from {forPatient ? "the patient's" : "your"} latest lab trends,
+              active medications, diet, and last visit.
+              {forPatient ? " Print or hand it over at the consult." : " Print it and walk in ready."}
             </p>
           </div>
           <Button onClick={generate} disabled={loading} size="lg">
@@ -126,12 +144,14 @@ export function VisitPrepView({ patientName }: { patientName: string }) {
           <Button variant="ghost" size="sm" onClick={generate}>
             <Sparkles className="mr-2 size-4" />Regenerate
           </Button>
-          <ShareButton
-            resource="VISIT_PREP"
-            snapshotJson={prep}
-            label="Visit Prep"
-            buttonLabel="Share via WhatsApp"
-          />
+          {showShare && (
+            <ShareButton
+              resource="VISIT_PREP"
+              snapshotJson={prep}
+              label="Visit Prep"
+              buttonLabel="Share via WhatsApp"
+            />
+          )}
         </div>
       </div>
 

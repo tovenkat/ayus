@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RequestAccessButton } from "@/components/patients/request-access-button";
 import { UploadForPatient } from "@/components/patients/upload-for-patient";
+import { VisitPrepView } from "@/components/visit-prep/visit-prep-view";
 
 function fmtDate(d: Date | null): string {
   if (!d) return "—";
@@ -171,6 +172,19 @@ export default async function PatientDashboardPage({
       {/* Full clinical dashboard: status pie + organ map + biomarker cards + trends.
           patientId puts the shell in read-only mode (no self-scoped refetch). */}
       <DashboardShell initialData={dashData} organRegions={organRegions} patientId={patient.id} />
+
+      {/* Visit Prep — one-page consult summary for this patient. Sharing is a
+          patient-side action, so it's hidden here. */}
+      <div className="space-y-3">
+        <div>
+          <h2 className="font-heading text-xl font-semibold tracking-tight">Visit Prep</h2>
+          <p className="text-sm text-muted-foreground">
+            Generate a printable one-page summary from {displayName}&apos;s lab trends,
+            medications, diet, and last visit.
+          </p>
+        </div>
+        <VisitPrepView patientName={displayName} patientId={patient.id} showShare={false} />
+      </div>
     </div>
   );
 }
