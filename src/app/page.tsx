@@ -4,6 +4,7 @@ import { Logo } from "@/components/ui/logo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { AiDisclaimer } from "@/components/ui/ai-disclaimer";
 import { PRICING } from "@/lib/pricing";
 import {
   ArrowRight,
@@ -767,6 +768,7 @@ function SiteFooter() {
           </ul>
         </div>
       </div>
+      <div className="mx-auto max-w-6xl px-2"><AiDisclaimer variant="footer" /></div>
       <div className="border-t">
         <div className="mx-auto max-w-6xl px-4 py-4 flex flex-col sm:flex-row justify-between items-center gap-2 text-xs text-muted-foreground">
           <p>© 2026 Ayus. Built in Bengaluru 🇮🇳</p>

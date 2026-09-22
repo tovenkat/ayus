@@ -6,6 +6,7 @@ import { EmergencyCardView, type EmergencyData } from "@/components/emergency/em
 import { SharePinChallenge } from "@/components/share/share-pin-challenge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { AiDisclaimer } from "@/components/ui/ai-disclaimer";
 import { AlertTriangle, Clock, ShieldCheck } from "lucide-react";
 
 export const metadata = { title: "Shared health record — Ayus" };
@@ -156,6 +157,7 @@ export default async function SharePage({ params }: Params) {
         <div className="px-4 pt-4">
           <EmergencyCardView data={data} />
         </div>
+        <div className="mx-auto max-w-3xl px-4"><AiDisclaimer variant="footer" /></div>
       </div>
     );
   }
@@ -174,6 +176,7 @@ export default async function SharePage({ params }: Params) {
           <p className="text-xs text-muted-foreground">
             Rich rendering for Visit Prep snapshots is coming soon.
           </p>
+          <AiDisclaimer variant="footer" />
         </div>
       </div>
     );
@@ -260,6 +263,7 @@ export default async function SharePage({ params }: Params) {
               </CardContent>
             </Card>
           )}
+          <AiDisclaimer variant="footer" />
         </div>
       </div>
     );

@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { AiDisclaimer } from "@/components/ui/ai-disclaimer";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -268,6 +269,7 @@ export default function ChatPage() {
               <Send className="size-4" />
             </Button>
           </div>
+          <AiDisclaimer variant="inline" />
         </CardContent>
       </Card>
     </div>

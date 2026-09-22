@@ -7,6 +7,7 @@ import { MessageCircle, X, Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChatMessages, type ChatMessage, type Citation } from "./chat-messages";
 import { ChatInput } from "./chat-input";
+import { AiDisclaimer } from "@/components/ui/ai-disclaimer";
 
 export function ChatFab() {
   const pathname = usePathname();
@@ -181,6 +182,9 @@ export function ChatFab() {
           {/* Input — shrink-0 keeps it pinned at bottom */}
           <div className="shrink-0">
             <ChatInput onSend={handleSend} disabled={isStreaming} />
+            <div className="border-t px-3 pb-2">
+              <AiDisclaimer variant="inline" />
+            </div>
           </div>
         </div>
       )}
