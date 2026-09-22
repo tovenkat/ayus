@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Upload, BookOpen, Search, MessageSquare, MessageSquarePlus,
   Tags, Settings, Stethoscope, Pill, UtensilsCrossed, Dumbbell, FileText,
   ClipboardList, Siren, Network, Users, ClipboardCheck, Building2,
-  BedDouble, ScrollText, ShieldCheck, ActivitySquare,
+  BedDouble, ScrollText, ShieldCheck, ActivitySquare, Leaf,
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { Badge } from "@/components/ui/badge";
@@ -59,6 +59,8 @@ const NAV_BY_KIND: Record<AccountKind, NavGroup[]> = {
       { title: "Medications",     href: "/medications",  icon: Pill },
       { title: "Diet Schedule",   href: "/diet",         icon: UtensilsCrossed },
       { title: "Exercise Plan",   href: "/exercise",     icon: Dumbbell },
+      { title: "Supplements",     href: "/supplements",  icon: Pill },
+      { title: "Ayurveda",        href: "/ayurveda",     icon: Leaf },
     ] },
     { label: "Notes & Docs", items: [
       { title: "Health Notes",  href: "/wiki",       icon: BookOpen },

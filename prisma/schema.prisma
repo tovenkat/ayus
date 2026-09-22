@@ -170,6 +170,8 @@ model User {
   medications    Medication[]
   dietSchedules  DietSchedule[]
   exerciseSchedules ExerciseSchedule[]
+  supplementSchedules SupplementSchedule[]
+  ayurvedicSchedules  AyurvedicSchedule[]
   reports        Report[]
   testResults    TestResult[]
   clinicalReports ClinicalReport[]
@@ -609,6 +611,77 @@ model ExerciseSchedule {
   hidden       Boolean      @default(false)
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, active])
+}
+
+enum SupplementType {
+  VITAMIN
+  MINERAL
+  OMEGA
+  PROBIOTIC
+  PROTEIN
+  HERBAL
+  AMINO
+  ANTIOXIDANT
+  OTHER
+}
+
+// Supplement Planner: a daily/weekly supplement (nutraceutical) schedule,
+// mirrors ExerciseSchedule. AI-generated from labs, then user-approved.
+model SupplementSchedule {
+  id             String         @id @default(cuid())
+  userId         String
+  supplementType SupplementType
+  name           String // "Vitamin D3", "Omega-3", "Magnesium Glycinate"
+  dose           String? // "1000 IU", "500 mg"
+  form           String? // capsule | tablet | powder | liquid | gummy
+  timing         String? // "with food" | "empty stomach" | "bedtime"
+  time           String // "08:00"
+  daysOfWeek     Int[] // 0=Sun..6=Sat, empty=daily
+  notes          String?
+  active         Boolean        @default(true)
+  isFavorite     Boolean        @default(false)
+  hidden         Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, active])
+}
+
+enum AyurvedicType {
+  HERB
+  FORMULATION
+  THERAPY
+  ROUTINE
+  DIET
+  YOGA_PRANAYAMA
+  OTHER
+}
+
+// Ayurveda Planner: dosha- and biomarker-aware herbs, formulations, therapies
+// and routines, mirrors ExerciseSchedule. Educational; not a prescription.
+model AyurvedicSchedule {
+  id            String        @id @default(cuid())
+  userId        String
+  ayurvedicType AyurvedicType
+  name          String // "Ashwagandha", "Triphala", "Abhyanga (oil massage)"
+  dosha         String? // "VATA" | "PITTA" | "KAPHA" | "TRIDOSHA"
+  dose          String? // "1 tsp", "2 tablets", "500 mg"
+  anupana       String? // carrier: "warm water", "honey", "ghee", "milk"
+  timing        String? // "before meals" | "after meals" | "bedtime" | "empty stomach"
+  time          String // "07:00"
+  daysOfWeek    Int[] // 0=Sun..6=Sat, empty=daily
+  notes         String?
+  active        Boolean       @default(true)
+  isFavorite    Boolean       @default(false)
+  hidden        Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

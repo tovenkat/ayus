@@ -1143,3 +1143,50 @@ CREATE TABLE "ExerciseSchedule" (
 );
 CREATE INDEX "ExerciseSchedule_userId_active_idx" ON "ExerciseSchedule"("userId","active");
 ALTER TABLE "ExerciseSchedule" ADD CONSTRAINT "ExerciseSchedule_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- ── Supplement Planner ──────────────────────────────────────────────────────
+CREATE TYPE "SupplementType" AS ENUM ('VITAMIN','MINERAL','OMEGA','PROBIOTIC','PROTEIN','HERBAL','AMINO','ANTIOXIDANT','OTHER');
+CREATE TABLE "SupplementSchedule" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "supplementType" "SupplementType" NOT NULL,
+    "name" TEXT NOT NULL,
+    "dose" TEXT,
+    "form" TEXT,
+    "timing" TEXT,
+    "time" TEXT NOT NULL,
+    "daysOfWeek" INTEGER[],
+    "notes" TEXT,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "isFavorite" BOOLEAN NOT NULL DEFAULT false,
+    "hidden" BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "SupplementSchedule_pkey" PRIMARY KEY ("id")
+);
+CREATE INDEX "SupplementSchedule_userId_active_idx" ON "SupplementSchedule"("userId","active");
+ALTER TABLE "SupplementSchedule" ADD CONSTRAINT "SupplementSchedule_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- ── Ayurveda Planner ────────────────────────────────────────────────────────
+CREATE TYPE "AyurvedicType" AS ENUM ('HERB','FORMULATION','THERAPY','ROUTINE','DIET','YOGA_PRANAYAMA','OTHER');
+CREATE TABLE "AyurvedicSchedule" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "ayurvedicType" "AyurvedicType" NOT NULL,
+    "name" TEXT NOT NULL,
+    "dosha" TEXT,
+    "dose" TEXT,
+    "anupana" TEXT,
+    "timing" TEXT,
+    "time" TEXT NOT NULL,
+    "daysOfWeek" INTEGER[],
+    "notes" TEXT,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "isFavorite" BOOLEAN NOT NULL DEFAULT false,
+    "hidden" BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "AyurvedicSchedule_pkey" PRIMARY KEY ("id")
+);
+CREATE INDEX "AyurvedicSchedule_userId_active_idx" ON "AyurvedicSchedule"("userId","active");
+ALTER TABLE "AyurvedicSchedule" ADD CONSTRAINT "AyurvedicSchedule_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;

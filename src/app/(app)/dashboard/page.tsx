@@ -21,7 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import {
   Stethoscope, Pill, UtensilsCrossed, Dumbbell, Calendar,
-  Upload, Clock, Sun, Sunset, Moon, CloudSun, ArrowRight, Heart,
+  Upload, Clock, Sun, Sunset, Moon, CloudSun, ArrowRight, Heart, Leaf,
 } from "lucide-react";
 
 export const metadata = { title: "Dashboard — Ayus" };
@@ -99,7 +99,7 @@ async function LabResultsSection({
 async function HealthSections() {
   const userId = await requireAuth();
 
-  const [activeMeds, todayDiet, todayExercise, recentNotes, upcomingFollowups] = await Promise.all([
+  const [activeMeds, todayDiet, todayExercise, todaySupplements, todayAyurveda, recentNotes, upcomingFollowups] = await Promise.all([
     prisma.medication.findMany({
       where: { userId, active: true },
       orderBy: { name: "asc" },
@@ -109,6 +109,14 @@ async function HealthSections() {
       orderBy: { time: "asc" },
     }),
     prisma.exerciseSchedule.findMany({
+      where: { userId, active: true },
+      orderBy: { time: "asc" },
+    }),
+    prisma.supplementSchedule.findMany({
+      where: { userId, active: true },
+      orderBy: { time: "asc" },
+    }),
+    prisma.ayurvedicSchedule.findMany({
       where: { userId, active: true },
       orderBy: { time: "asc" },
     }),
@@ -131,6 +139,12 @@ async function HealthSections() {
   );
   const todayWorkouts = todayExercise.filter(
     (e) => e.daysOfWeek.length === 0 || e.daysOfWeek.includes(today)
+  );
+  const todaySupps = todaySupplements.filter(
+    (s) => s.daysOfWeek.length === 0 || s.daysOfWeek.includes(today)
+  );
+  const todayAyur = todayAyurveda.filter(
+    (a) => a.daysOfWeek.length === 0 || a.daysOfWeek.includes(today)
   );
 
   return (
@@ -280,6 +294,76 @@ async function HealthSections() {
               </div>
             ) : (
               <EmptyCard label="Rest day — or plan a workout" href="/exercise" action="Generate my week" />
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Today's Supplements */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Pill className="size-4 text-amber-500" />
+              Today&apos;s Supplements
+            </CardTitle>
+            <Link href="/supplements" className="text-xs text-primary hover:underline flex items-center gap-1">
+              Plan <ArrowRight className="size-3" />
+            </Link>
+          </CardHeader>
+          <CardContent>
+            {todaySupps.length > 0 ? (
+              <div className="space-y-2.5">
+                {todaySupps.map((s) => (
+                  <div key={s.id} className="flex items-start justify-between text-sm gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">{s.time}</span>
+                        {s.timing ? <Badge variant="secondary" className="text-[10px]">{s.timing}</Badge> : null}
+                      </div>
+                      <p className="text-xs mt-0.5 truncate">{s.name}</p>
+                    </div>
+                    {s.dose ? (
+                      <span className="text-xs text-muted-foreground shrink-0">{s.dose}</span>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyCard label="No supplements today" href="/supplements" action="Generate my stack" />
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Today's Ayurveda */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Leaf className="size-4 text-green-600" />
+              Today&apos;s Ayurveda
+            </CardTitle>
+            <Link href="/ayurveda" className="text-xs text-primary hover:underline flex items-center gap-1">
+              Plan <ArrowRight className="size-3" />
+            </Link>
+          </CardHeader>
+          <CardContent>
+            {todayAyur.length > 0 ? (
+              <div className="space-y-2.5">
+                {todayAyur.map((a) => (
+                  <div key={a.id} className="flex items-start justify-between text-sm gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">{a.time}</span>
+                        {a.dosha ? <Badge variant="secondary" className="text-[10px] capitalize">{a.dosha.toLowerCase()}</Badge> : null}
+                      </div>
+                      <p className="text-xs mt-0.5 truncate">{a.name}</p>
+                    </div>
+                    {a.dose ? (
+                      <span className="text-xs text-muted-foreground shrink-0">{a.dose}</span>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyCard label="No Ayurvedic items today" href="/ayurveda" action="Generate my plan" />
             )}
           </CardContent>
         </Card>

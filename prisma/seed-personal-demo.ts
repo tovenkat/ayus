@@ -345,6 +345,33 @@ async function seedExercise(userId: string) {
   return sessions.length;
 }
 
+async function seedSupplements(userId: string) {
+  await prisma.supplementSchedule.deleteMany({ where: { userId } });
+  // Prediabetic / dyslipidemia / vitamin-D-deficient profile → conservative stack.
+  const items: Array<Parameters<typeof prisma.supplementSchedule.create>[0]["data"]> = [
+    { userId, supplementType: "VITAMIN", name: "Vitamin D3", dose: "2000 IU", form: "capsule", timing: "with food", time: "08:00", daysOfWeek: [], notes: "For 25-OH Vitamin D deficiency; pair with a fatty meal + K2.", active: true },
+    { userId, supplementType: "OMEGA", name: "Omega-3 (EPA/DHA)", dose: "1000 mg", form: "softgel", timing: "with food", time: "08:00", daysOfWeek: [], notes: "Supports LDL/triglycerides.", active: true },
+    { userId, supplementType: "MINERAL", name: "Magnesium Glycinate", dose: "300 mg", form: "capsule", timing: "bedtime", time: "21:30", daysOfWeek: [], notes: "Glucose metabolism + sleep; gentle on the gut.", active: true },
+    { userId, supplementType: "VITAMIN", name: "Vitamin B12 (Methylcobalamin)", dose: "1500 mcg", form: "tablet", timing: "with food", time: "08:00", daysOfWeek: [], notes: "Low B12 on recent labs.", active: true },
+  ];
+  for (const data of items) await prisma.supplementSchedule.create({ data });
+  return items.length;
+}
+
+async function seedAyurveda(userId: string) {
+  await prisma.ayurvedicSchedule.deleteMany({ where: { userId } });
+  // Kapha-leaning metabolic picture (high glucose/lipids) → warming, light,
+  // digestion-supporting herbs + routine. Educational demo data only.
+  const items: Array<Parameters<typeof prisma.ayurvedicSchedule.create>[0]["data"]> = [
+    { userId, ayurvedicType: "FORMULATION", name: "Triphala", dosha: "TRIDOSHA", dose: "1 tsp", anupana: "warm water", timing: "bedtime", time: "21:30", daysOfWeek: [], notes: "Supports digestion & regularity; gentle for a Kapha lean.", active: true },
+    { userId, ayurvedicType: "HERB", name: "Ashwagandha", dosha: "VATA", dose: "500 mg", anupana: "warm milk", timing: "bedtime", time: "21:00", daysOfWeek: [], notes: "For stress & sleep. Note: check with doctor alongside thyroid/BP meds.", active: true },
+    { userId, ayurvedicType: "ROUTINE", name: "Warm water with lemon on waking", dosha: "KAPHA", dose: "1 glass", anupana: "warm water", timing: "empty stomach", time: "06:30", daysOfWeek: [], notes: "Kindles Agni (digestive fire) for a Kapha-leaning metabolism.", active: true },
+    { userId, ayurvedicType: "YOGA_PRANAYAMA", name: "Kapalabhati + Surya Namaskar", dosha: "KAPHA", dose: "10 min", anupana: null, timing: "empty stomach", time: "07:00", daysOfWeek: [1, 2, 3, 4, 5], notes: "Stimulating practice to counter Kapha heaviness.", active: true },
+  ];
+  for (const data of items) await prisma.ayurvedicSchedule.create({ data });
+  return items.length;
+}
+
 async function seedVisits(userId: string) {
   // Remove prior self-recorded demo visits (no org attribution). Prescriptions cascade.
   await prisma.doctorNote.deleteMany({ where: { userId, organizationId: null } });
@@ -434,13 +461,15 @@ async function main() {
   const meds = await seedMedications(user.id);
   const meals = await seedMeals(user.id);
   const workouts = await seedExercise(user.id);
+  const supplements = await seedSupplements(user.id);
+  const ayurveda = await seedAyurveda(user.id);
   const visits = await seedVisits(user.id);
   const ai = await enableInternetLlm(user.id);
 
   console.log(
     `[personal-demo] ${user.name ?? PHONE}: ${reports} reports, ${results} results, ` +
     `${wikiPages} wiki pages + ${notes} personal health notes, ${meds} medications, ${meals} meals, ` +
-    `${workouts} workouts, ${visits} doctor visits (1 upcoming follow-up); AI: ${ai}. ` +
+    `${workouts} workouts, ${supplements} supplements, ${ayurveda} ayurvedic items, ${visits} doctor visits (1 upcoming follow-up); AI: ${ai}. ` +
     `Log in as ${PHONE} → /wiki (Health Notes) · /wiki/graph (Graph).`,
   );
 }
